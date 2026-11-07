@@ -126,7 +126,7 @@ def test_restore_live_nothing_to_do(plugin):
 def test_restore_full_schedules_helper(plugin, monkeypatch):
     module, page, host = plugin
     page.std = module.clean_standard({"slots": [{"presets": {"default": "PLA A"}}],
-                                      "printers": {"Bambu Lab A1 0.4 nozzle": "0.4"}})
+                                      "printers": {"Bambu Lab A1 0.4 nozzle": "0.4"}, "allow_conf_edit": True})
     launched = []
     monkeypatch.setattr(module, "find_python", lambda: "/usr/bin/python3")
     monkeypatch.setattr(module.subprocess, "Popen", lambda args, **kw: launched.append(args))
@@ -145,6 +145,10 @@ def test_restore_full_schedules_helper(plugin, monkeypatch):
 def test_restore_full_needs_printers_and_python(plugin, monkeypatch):
     module, page, host = plugin
     page.std = module.clean_standard({"slots": [{"presets": {"default": "PLA A"}}]})
+    page.on_message({"cmd": "restore_full"})
+    assert page.state()["error"].startswith("The full restore is off")  # opt-in, off by default
+    assert not os.path.exists(os.path.join(host.storage_dir, module.JOB_FILE))
+    page.std["allow_conf_edit"] = True
     page.on_message({"cmd": "restore_full"})
     assert page.state()["error"] == "Select at least one printer profile first"
     page.on_message({"cmd": "add_current_printer"})
@@ -195,7 +199,8 @@ def test_legacy_storage_is_migrated(plugin):
     assert state["std"]["slots"][0]["presets"] == {"default": "PLA A", "0.2": "PLA A 0.2"}
     assert set(state["std"]["printers"]) == {"Bambu Lab A1 0.4 nozzle", "Bambu Lab A1 0.2 nozzle"}
     assert state["lang"] == "pt"  # the old plugin was Portuguese-only
-    assert "versão anterior" in state["status"]
+    assert "instalação anterior" in state["status"]
+    assert state["std"]["spoolman_url"] == ""  # not carried over
     assert os.path.exists(os.path.join(host.storage_dir, module.STD_FILE))
 
 
@@ -271,7 +276,13 @@ def test_find_previous_from_cloud_storage(fs, tmp_path):
     legacy = data_root / "filamentos_padrao"
     legacy.mkdir()
     (legacy / "padrao.json").write_text('{"slots": [{"p04": "X"}]}', encoding="utf-8")
-    assert fs.find_previous(str(cloud)) == ("legacy", {"slots": [{"p04": "X"}]})
+    kind, data = fs.find_previous(str(cloud))
+    assert kind == "legacy" and data["slots"] == [{"p04": "X"}]
+    # other plugins' folders are never read
+    other = data_root / "some_other_plugin"
+    other.mkdir()
+    (other / fs.STD_FILE).write_text('{"slots": [{"presets": {"default": "OTHER"}}]}', encoding="utf-8")
+    assert fs.find_previous(str(cloud))[0] == "legacy"
     local = data_root / "filament_standard"
     local.mkdir()
     (local / fs.STD_FILE).write_text('{"slots": [{"presets": {"default": "Y"}}]}', encoding="utf-8")

@@ -26,7 +26,7 @@ O FilamentStandard guarda uma lista padrão: slot → perfil de filamento por di
 | **Editor da lista padrão** | Uma aba com uma linha por slot: cor, perfil para cada diâmetro de bico (a coluna *padrão* vale quando o bico não tem perfil próprio), carretel do Spoolman e o que o projeto atual tem naquele slot. |
 | **Usar a lista atual como padrão** | Captura os slots e as cores do projeto aberto. Os carretéis são mantidos casando perfil e cor. |
 | **Restaurar perfis agora** | Troca na hora o perfil de cada slot existente, pela API de plugins. |
-| **Restauração completa ao fechar** | Um pequeno auxiliar espera o OrcaSlicer fechar e faz o que a API não consegue: grava a lista (perfis, cores e matriz de purga) em **todos os perfis de impressora escolhidos** e os preços nos perfis de filamento. Antes, faz backup de tudo. Depois, pode reabrir o OrcaSlicer. |
+| **Restauração completa ao fechar** *(opcional)* | Fica desligada até você ativar em *Restauração completa*. Um pequeno auxiliar espera o OrcaSlicer fechar e faz o que a API não consegue: grava a lista (perfis, cores e matriz de purga) em **todos os perfis de impressora escolhidos** e os preços nos perfis de filamento. Antes, faz backup do que vai mudar. Depois, pode reabrir o OrcaSlicer. |
 | **Sincronização com o Spoolman** *(opcional)* | Mostra antes os carretéis novos e removidos, as mudanças de cor e o preço médio por kg de cada perfil. Só aplica quando você confirma. Carretel de filamento desconhecido pede o perfil uma vez e lembra dele. |
 | **Restaurar ao criar Novo projeto** *(opcional, desligado por padrão)* | Troca os perfis sempre que um projeto novo começa. |
 | **Qualquer impressora** | Bambu Lab, Prusa, Creality, Voron/Klipper e outras. O perfil é escolhido por diâmetro de bico, e impressoras com mais de um extrusor mantêm uma matriz de purga por extrusor. |
@@ -36,6 +36,17 @@ O FilamentStandard guarda uma lista padrão: slot → perfil de filamento por di
 ### O que a API de plugins faz e o que não faz
 
 A API do OrcaSlicer 2.5 consegue trocar o perfil de um slot **que já existe** (`orca.host.preset.filament.begin_update`). Ela não cria nem remove slots e não muda a cor de um slot. Por isso existe a **restauração completa**: ela edita o `OrcaSlicer.conf` com o OrcaSlicer fechado, do mesmo jeito que o próprio OrcaSlicer grava o arquivo, com checksum MD5.
+
+## Privacidade e segurança
+
+- **Sem acesso à rede, a não ser que você configure.** O plugin só fala com a URL do Spoolman que você digitar em Configuração, e só quando você clica em *Sincronizar com o Spoolman*. É uma leitura (`GET /api/v1/spool`); nada é enviado para lugar nenhum.
+- **O `OrcaSlicer.conf` só é editado pela restauração completa, que é opcional e roda com o OrcaSlicer fechado.**
+  - Esse arquivo também guarda outras configurações, como os códigos de acesso das suas impressoras.
+  - A restauração completa muda só as entradas `orca_presets` das impressoras que você escolheu.
+  - Todas as outras chaves são gravadas de volta sem alteração e nunca são copiadas, registradas em log nem enviadas.
+  - O backup guarda só as entradas alteradas.
+- **Desfazer.** `python filament_standard.py --undo "<pasta de dados do OrcaSlicer>" "<pasta do backup>"` devolve essas entradas e os perfis de filamento.
+- **Nada de dados de outros plugins.** Na primeira execução, o plugin só procura um padrão deixado por ele mesmo.
 
 ## Instalação
 
@@ -64,7 +75,7 @@ Todo o resto roda no Python embutido do OrcaSlicer.
 4. Clique em **Salvar padrão**.
 5. Sempre que um projeto bagunçar a lista:
    - **Restaurar perfis agora** corrige os perfis dos slots existentes;
-   - **Restauração completa ao fechar**, seguida de fechar o OrcaSlicer, corrige tudo, inclusive cores e quantidade de slots.
+   - **Restauração completa ao fechar**, seguida de fechar o OrcaSlicer, corrige tudo, inclusive cores e quantidade de slots. Ative uma vez em *Restauração completa*.
 
 ### Spoolman
 
@@ -81,7 +92,7 @@ Em **Configuração**, informe a URL do Spoolman, por exemplo `http://192.168.1.
 | Lista padrão e configurações | `<pasta de dados do OrcaSlicer>/orca_plugins/plugin_data/<plugin>/standard.json` |
 | Restauração completa pendente | `job.json`, na mesma pasta |
 | Log do auxiliar | `apply.log`, na mesma pasta |
-| Backups (um por restauração completa) | `<pasta de dados do OrcaSlicer>/backup-filament-standard-<data>/`, com o `OrcaSlicer.conf` e os perfis de filamento |
+| Backups (um por restauração completa) | `<pasta de dados do OrcaSlicer>/backup-filament-standard-<data>/`, com o `orca_presets.json` (só as entradas alteradas) e os perfis de filamento cujo preço mudou |
 
 A pasta de dados do OrcaSlicer é `%APPDATA%\OrcaSlicer` no Windows, `~/Library/Application Support/OrcaSlicer` no macOS e `~/.config/OrcaSlicer` no Linux.
 
@@ -93,6 +104,7 @@ Com o OrcaSlicer fechado, o mesmo arquivo restaura um padrão sem a interface:
 
 ```bash
 python filament_standard.py --restore "<pasta de dados do OrcaSlicer>" standard.json
+python filament_standard.py --undo "<pasta de dados do OrcaSlicer>" "<pasta do backup>"
 ```
 
 ## Como funciona

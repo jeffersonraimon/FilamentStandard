@@ -26,7 +26,7 @@ FilamentStandard keeps one standard list: slot → filament preset per nozzle di
 | **Standard list editor** | A tab with one row per slot: colour, the preset for each nozzle diameter (the *default* column is used when a nozzle has no preset of its own), the Spoolman spool, and what the current project has in that slot. |
 | **Use current list as standard** | Captures the slots and colours of the open project. Spools are kept by matching preset and colour. |
 | **Restore presets now** | Re-assigns the preset of every existing slot live, through the plugin API. |
-| **Full restore on close** | A small helper waits for OrcaSlicer to close, then does everything the API can't: it writes the list (presets, colours, flush matrix) into **every selected printer profile** and writes the prices into your filament presets. It backs everything up first and can reopen OrcaSlicer. |
+| **Full restore on close** *(opt-in)* | Off until you enable it under *Full restore*. A small helper waits for OrcaSlicer to close, then does everything the API can't: it writes the list (presets, colours, flush matrix) into **every selected printer profile** and writes the prices into your filament presets. It backs up what it changes and can reopen OrcaSlicer. |
 | **Spoolman sync** *(optional)* | Previews new and removed spools, colour changes and the average price per kg of each preset, then applies them only when you confirm. Spools of an unknown filament ask for a preset once and remember it. |
 | **Restore on New project** *(optional, off by default)* | Re-assigns the presets whenever a new project starts. |
 | **Any printer** | Bambu Lab, Prusa, Creality, Voron/Klipper and others. Presets are chosen per nozzle diameter, and multi-extruder printers keep one flush matrix per extruder. |
@@ -36,6 +36,17 @@ FilamentStandard keeps one standard list: slot → filament preset per nozzle di
 ### What the plugin API can and can't do
 
 The OrcaSlicer 2.5 plugin API can assign a preset to an **existing** slot (`orca.host.preset.filament.begin_update`). It can't add or remove slots, and it can't set a slot's colour. That is why the **full restore** exists: it edits `OrcaSlicer.conf` while OrcaSlicer is closed, the same way OrcaSlicer itself writes it, MD5 checksum included.
+
+## Privacy and safety
+
+- **No network access unless you set it up.** The plugin only talks to the Spoolman URL you type in Settings, and only when you press *Sync with Spoolman*. That is a read-only `GET /api/v1/spool`; nothing is sent anywhere.
+- **`OrcaSlicer.conf` is only edited by the opt-in full restore, with OrcaSlicer closed.**
+  - That file also holds other settings, such as the access codes of your printers.
+  - The full restore changes only the `orca_presets` entries of the printers you selected.
+  - Every other key is written back unchanged and is never copied, logged or sent anywhere.
+  - Its backup holds only the entries it changes.
+- **Undo.** `python filament_standard.py --undo "<OrcaSlicer data dir>" "<backup folder>"` puts those entries and the filament presets back.
+- **No other plugins' data.** On the first run it only looks for a standard left by this plugin itself.
 
 ## Install
 
@@ -64,7 +75,7 @@ Everything else runs inside OrcaSlicer's bundled Python.
 4. **Save standard**.
 5. Whenever a project messes the list up:
    - **Restore presets now** fixes the presets of the existing slots;
-   - **Full restore on close**, then close OrcaSlicer, fixes everything, colours and slot count included.
+   - **Full restore on close**, then close OrcaSlicer, fixes everything, colours and slot count included. Enable it once under *Full restore*.
 
 ### Spoolman
 
@@ -81,7 +92,7 @@ Under **Settings**, set the Spoolman URL, for example `http://192.168.1.10:7912`
 | Standard list and settings | `<OrcaSlicer data dir>/orca_plugins/plugin_data/<plugin>/standard.json` |
 | Pending full restore | `job.json` in the same folder |
 | Helper log | `apply.log` in the same folder |
-| Backups (one per full restore) | `<OrcaSlicer data dir>/backup-filament-standard-<date>/`, with `OrcaSlicer.conf` and the filament presets |
+| Backups (one per full restore) | `<OrcaSlicer data dir>/backup-filament-standard-<date>/`, with `orca_presets.json` (only the entries that changed) and the filament presets whose price changed |
 
 The OrcaSlicer data dir is `%APPDATA%\OrcaSlicer` on Windows, `~/Library/Application Support/OrcaSlicer` on macOS and `~/.config/OrcaSlicer` on Linux.
 
@@ -91,6 +102,7 @@ With OrcaSlicer closed, the same file restores a standard without the GUI:
 
 ```bash
 python filament_standard.py --restore "<OrcaSlicer data dir>" standard.json
+python filament_standard.py --undo "<OrcaSlicer data dir>" "<backup folder>"
 ```
 
 ## How it works

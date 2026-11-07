@@ -84,3 +84,10 @@ def test_main_restore(fs, tmp_path, data_dir, standard, monkeypatch, capsys):
 def test_find_python_returns_a_path_or_empty(fs):
     found = fs.find_python()
     assert found == "" or os.path.exists(found)
+
+
+def test_main_undo(fs, tmp_path, data_dir, standard, monkeypatch):
+    monkeypatch.setattr(fs, "orca_running", lambda: False)
+    _, _, backup = fs.restore(str(data_dir), standard, lambda *_: None)
+    assert fs.main(["x", "--undo", str(data_dir), backup]) == 0
+    assert fs.read_conf(str(data_dir / "OrcaSlicer.conf")) == sample_conf()

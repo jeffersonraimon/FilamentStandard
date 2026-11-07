@@ -91,7 +91,8 @@ def test_migrate_legacy(fs):
     assert std["spool_map"]["Multfila|PLA Basic"] == {"default": "MULTFILA PLA", "0.2": "Multfila PLA 0.2"}
     assert std["printers"] == {"Bambu Lab A1 0.2 nozzle": "0.2", "Bambu Lab A1 0.4 nozzle - A1-SL": "0.4"}
     assert std["language"] == "pt"
-    assert std["spoolman_url"] == "http://spoolman:7912"
+    assert std["spoolman_url"] == ""  # never carried over without the user setting it here
+    assert std["allow_conf_edit"] is False
 
 
 def test_migrate_legacy_bad_regex(fs):

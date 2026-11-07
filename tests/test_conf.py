@@ -105,9 +105,40 @@ def test_restore_end_to_end(fs, data_dir, standard):
     assert len(changed) == 3 and missing
     conf_path = data_dir / "OrcaSlicer.conf"
     assert fs.verify_conf(str(conf_path))
-    assert fs.entry_filaments(fs.read_conf(str(conf_path))["orca_presets"][0]) == ["PLA A", "PLA B", "PETG C"]
-    assert os.path.isfile(os.path.join(backup, "OrcaSlicer.conf"))
-    assert fs.read_conf(os.path.join(backup, "OrcaSlicer.conf")) == sample_conf()
-    assert os.path.isfile(os.path.join(backup, "filament", "PLA A.json"))
+    conf = fs.read_conf(str(conf_path))
+    assert fs.entry_filaments(conf["orca_presets"][0]) == ["PLA A", "PLA B", "PETG C"]
+    # everything outside the selected orca_presets entries is untouched
+    original = sample_conf()
+    assert {k: v for k, v in conf.items() if k != "orca_presets"} == {k: v for k, v in original.items() if k != "orca_presets"}
+    # the backup holds only the entries that changed, never the whole file
+    assert sorted(os.listdir(backup)) == ["filament", "orca_presets.json"]
+    saved = fs.read_json(os.path.join(backup, "orca_presets.json"))
+    assert [e["machine"] for e in saved["orca_presets"]] == changed
+    assert saved["orca_presets"][0] == original["orca_presets"][0]
+    assert sorted(os.listdir(os.path.join(backup, "filament"))) == ["PETG C.json", "PLA A 0.2.json", "PLA A.info", "PLA A.json"]
     assert any("price PLA A: 100 -> 120.00" in line for line in logs)
     assert any("skipped" in line for line in logs)
+
+
+def test_restore_never_copies_or_logs_secrets(fs, data_dir, standard):
+    logs = []
+    _, _, backup = fs.restore(str(data_dir), standard, logs.append)
+    for folder, _, files in os.walk(backup):
+        for name in files:
+            with open(os.path.join(folder, name), encoding="utf-8", errors="ignore") as stream:
+                assert "SECRET" not in stream.read(), name
+    assert not any("SECRET" in line for line in logs)
+    conf = fs.read_conf(str(data_dir / "OrcaSlicer.conf"))
+    assert conf["access_code"] == {"PRINTER-SERIAL": "SECRET-ACCESS-CODE"}
+
+
+def test_undo(fs, data_dir, standard):
+    fdir = data_dir / "user" / "uid123" / "filament"
+    _, _, backup = fs.restore(str(data_dir), standard, lambda *_: None)
+    assert fs.read_conf(str(data_dir / "OrcaSlicer.conf")) != sample_conf()
+    fs.undo(str(data_dir), backup, lambda *_: None)
+    assert fs.read_conf(str(data_dir / "OrcaSlicer.conf")) == sample_conf()
+    assert json.loads((fdir / "PLA A.json").read_text(encoding="utf-8"))["filament_cost"] == ["100"]
+    assert fs.verify_conf(str(data_dir / "OrcaSlicer.conf"))
+    with pytest.raises(RuntimeError):
+        fs.undo(str(data_dir), str(data_dir), lambda *_: None)

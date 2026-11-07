@@ -160,6 +160,8 @@ def plugin(tmp_path):
 def sample_conf():
     return {
         "app": {"preset_folder": "uid123", "version": "2.5.0"},
+        "access_code": {"PRINTER-SERIAL": "SECRET-ACCESS-CODE"},
+        "user_access_code": {"PRINTER-SERIAL": "SECRET-USER-CODE"},
         "orca_presets": [
             {"machine": "Bambu Lab A1 0.4 nozzle", "filament": "Generic PLA", "filament_01": "Generic PLA",
              "filament_colors": "#FFFFFF,#000000", "filament_multi_colors": "#FFFFFF,#000000",

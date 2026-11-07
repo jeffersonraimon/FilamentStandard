@@ -7,7 +7,7 @@
 # name = "FilamentStandard"
 # description = "Keep a standard filament list (order, per-nozzle presets and colours) for your printers, restore it after opening projects, and sync spools and prices from Spoolman. English / Português."
 # author = "Jefferson J. Raimon"
-# version = "2.1.1"
+# version = "2.2.0"
 # ///
 """FilamentStandard - an OrcaSlicer plugin.
 
@@ -57,7 +57,7 @@ try:
 except ImportError:  # tests and the stand-alone helper
     orca = None
 
-VERSION = "2.1.1"
+VERSION = "2.2.0"
 STD_FILE = "standard.json"
 JOB_FILE = "job.json"
 LOG_FILE = "apply.log"
@@ -126,7 +126,12 @@ STRINGS = {
         "spool_n": "spool {id}",
         "ok": "ok",
         "first_run": "No standard yet. Set up the list below or use \"Use current list as standard\".",
-        "migrated": "Imported the standard from the previous version of the plugin ({n} slots).",
+        "migrated": "Imported the standard from a previous install of the plugin ({n} slots). The Spoolman URL and the full restore were not carried over: set them again in Settings if you use them.",
+        "full_section": "Full restore",
+        "allow_conf_edit": "allow the full restore to edit OrcaSlicer.conf",
+        "allow_conf_edit_help": "The plugin API cannot add slots or change colours, so the full restore edits OrcaSlicer.conf with OrcaSlicer closed. Only the filament lists of the selected printer profiles change; other settings in that file, such as printer access codes, are left as they are and are not copied. The backup keeps only the lists that change (undo: python filament_standard.py --undo <data dir> <backup folder>).",
+        "full_confirm": "Schedule the full restore? When OrcaSlicer closes, the filament lists of the selected printer profiles in OrcaSlicer.conf will be replaced.",
+        "err_conf_edit_off": "The full restore is off. Turn it on under Full restore.",
         "msg_saved": "Standard saved ({n} slots).",
         "msg_captured": "Current list ({n} slots, {machine}) saved as standard in the \"{column}\" column. Check the other columns.",
         "msg_live_none": "The {n} slots already use the standard presets.",
@@ -203,7 +208,12 @@ STRINGS = {
         "spool_n": "carretel {id}",
         "ok": "ok",
         "first_run": "Ainda não há padrão. Monte a lista abaixo ou use \"Usar a lista atual como padrão\".",
-        "migrated": "Padrão importado da versão anterior do plugin ({n} slots).",
+        "migrated": "Padrão importado de uma instalação anterior do plugin ({n} slots). A URL do Spoolman e a restauração completa não foram trazidas: configure de novo se usar.",
+        "full_section": "Restauração completa",
+        "allow_conf_edit": "permitir que a restauração completa edite o OrcaSlicer.conf",
+        "allow_conf_edit_help": "A API de plugins não cria slots nem muda cores, então a restauração completa edita o OrcaSlicer.conf com o OrcaSlicer fechado. Só mudam as listas de filamentos dos perfis de impressora escolhidos; as outras configurações do arquivo, como os códigos de acesso das impressoras, ficam como estão e não são copiadas. O backup guarda só as listas alteradas (desfazer: python filament_standard.py --undo <pasta de dados> <pasta do backup>).",
+        "full_confirm": "Agendar a restauração completa? Quando o OrcaSlicer fechar, as listas de filamentos dos perfis de impressora escolhidos no OrcaSlicer.conf serão substituídas.",
+        "err_conf_edit_off": "A restauração completa está desligada. Ligue em Restauração completa.",
         "msg_saved": "Padrão salvo ({n} slots).",
         "msg_captured": "Lista atual ({n} slots, {machine}) salva como padrão na coluna \"{column}\". Confira as outras colunas.",
         "msg_live_none": "Os {n} slots já estão com os perfis do padrão.",
@@ -253,6 +263,7 @@ def empty_standard():
         "spoolman_url": "",
         "auto_new_project": False,
         "relaunch": True,
+        "allow_conf_edit": False,  # the full restore edits OrcaSlicer.conf: explicit opt-in
         "language": "auto",
         "sort_on_sync": True,
     }
@@ -313,7 +324,7 @@ def clean_standard(data):
     for key in ("spoolman_url", "language"):
         if isinstance(data.get(key), str):
             std[key] = data[key].strip()
-    for key in ("auto_new_project", "relaunch", "sort_on_sync"):
+    for key in ("auto_new_project", "relaunch", "sort_on_sync", "allow_conf_edit"):
         if key in data:
             std[key] = bool(data[key])
     if std["language"] not in ("auto",) + LANGUAGES:
@@ -349,7 +360,6 @@ def migrate_legacy(old, printer_names=()):
     """Convert the pre-2.0 format (p04/p02 columns, machine_regex) into the current one."""
     data = {
         "slots": [], "spool_map": {}, "prices": old.get("prices") or {},
-        "spoolman_url": old.get("spoolman_url") or "",
         "auto_new_project": old.get("auto_new_project", False),
         "relaunch": old.get("relaunch", True),
         "language": "pt",
@@ -553,13 +563,23 @@ def apply_prices(filament_dir, prices, user_id=""):
     return done
 
 
+BACKUP_FILE = "orca_presets.json"
+
+
 def restore(data_dir, std, log=print):
-    """Apply the standard to an OrcaSlicer data folder. OrcaSlicer must be closed."""
+    """Apply the standard to an OrcaSlicer data folder. OrcaSlicer must be closed.
+
+    OrcaSlicer.conf also holds other settings, including printer access codes. Only the
+    ``orca_presets`` entries of the selected printers are changed; every other key is written
+    back unchanged and is never logged or copied. The backup holds just the entries that change.
+    """
     conf_path = os.path.join(data_dir, "OrcaSlicer.conf")
+    conf = read_conf(conf_path)
+    printers = set(std.get("printers") or {})
+    before = [json.loads(json.dumps(e)) for e in conf.get("orca_presets", []) if e.get("machine") in printers]
     backup = os.path.join(data_dir, "backup-filament-standard-" + time.strftime("%Y%m%d-%H%M%S"))
     os.makedirs(backup, exist_ok=True)
-    shutil.copy2(conf_path, backup)
-    conf = read_conf(conf_path)
+    write_json_atomic(os.path.join(backup, BACKUP_FILE), {"orca_presets": before})
     changed, missing = apply_lists(conf, std)
     write_conf(conf_path, conf)
     log("list with %d slots written to %d printer profile(s): %s" % (len(std["slots"]), len(changed), ", ".join(changed)))
@@ -569,7 +589,14 @@ def restore(data_dir, std, log=print):
     if std.get("prices"):
         fdir = os.path.join(data_dir, "user", user_id or "default", "filament")
         if os.path.isdir(fdir):
-            shutil.copytree(fdir, os.path.join(backup, "filament"))
+            names = [n for n in std["prices"] if os.path.isfile(os.path.join(fdir, n + ".json"))]
+            if names:
+                os.makedirs(os.path.join(backup, "filament"), exist_ok=True)
+            for name in names:
+                for ext in (".json", ".info"):
+                    src = os.path.join(fdir, name + ext)
+                    if os.path.isfile(src):
+                        shutil.copy2(src, os.path.join(backup, "filament", name + ext))
             changes = apply_prices(fdir, std["prices"], user_id)
             for name, old, new in changes:
                 log("price %s: %s -> %s" % (name, old or "-", new))
@@ -577,6 +604,30 @@ def restore(data_dir, std, log=print):
                 log("prices: no preset needed a change")
     log("backup in %s" % backup)
     return changed, missing, backup
+
+
+def undo(data_dir, backup, log=print):
+    """Put back the orca_presets entries and filament presets saved by restore(). OrcaSlicer must be closed."""
+    saved = read_json(os.path.join(backup, BACKUP_FILE))
+    if not isinstance(saved, dict):
+        raise RuntimeError("not a FilamentStandard backup: %s" % backup)
+    conf_path = os.path.join(data_dir, "OrcaSlicer.conf")
+    conf = read_conf(conf_path)
+    entries = {e.get("machine"): e for e in saved.get("orca_presets", [])}
+    presets = conf.get("orca_presets", [])
+    for i, entry in enumerate(presets):
+        if entry.get("machine") in entries:
+            presets[i] = entries[entry["machine"]]
+    write_conf(conf_path, conf)
+    log("restored %d printer profile(s): %s" % (len(entries), ", ".join(entries)))
+    fbackup = os.path.join(backup, "filament")
+    if os.path.isdir(fbackup):
+        user_id = (conf.get("app") or {}).get("preset_folder") or "default"
+        fdir = os.path.join(data_dir, "user", user_id, "filament")
+        for name in os.listdir(fbackup):
+            shutil.copy2(os.path.join(fbackup, name), os.path.join(fdir, name))
+        log("restored the filament presets from %s" % fbackup)
+    return list(entries)
 
 
 # ---------------------------------------------------------------- helper process
@@ -822,32 +873,41 @@ def storage_from(path):
     return ""
 
 
+OWN_DIR = re.compile(r"filament[_-]?standard", re.I)
+
+
 def find_previous(storage_dir):
     """Standard left by another installation of this plugin, for a first run.
 
-    Looks under the plugin_data root (local and Orca Cloud installs use different folders) for
-    the 1.x "Filamentos Padrão" file and for other FilamentStandard installs (e.g. a local copy
-    before subscribing on Orca Cloud). Returns ("legacy" | "current", data) or ("", None).
+    Only this plugin's own folders are read, never other plugins' data:
+    ``plugin_data/filamentos_padrao`` (1.x) and ``plugin_data/filament_standard*`` (local installs,
+    e.g. before subscribing on Orca Cloud). The Spoolman URL and the full-restore opt-in are not
+    carried over. Returns ("legacy" | "current", data) or ("", None).
     """
     here = os.path.normcase(os.path.abspath(storage_dir))
     parts = here.split(os.sep)
-    root = os.sep.join(parts[:len(parts) - parts[::-1].index("plugin_data")]) if "plugin_data" in parts         else os.path.dirname(here)
+    if "plugin_data" in parts:
+        root = os.sep.join(parts[:len(parts) - parts[::-1].index("plugin_data")])
+    else:
+        root = os.path.dirname(here)
+    try:
+        names = os.listdir(root)
+    except OSError:
+        names = []
     found = []
-    for folder, dirs, files in os.walk(root):
-        if folder.count(os.sep) - root.count(os.sep) >= 4:
-            dirs[:] = []
+    for name in names:
+        folder = os.path.join(root, name)
         if os.path.normcase(os.path.abspath(folder)) == here:
             continue
-        name = os.path.basename(folder)
-        if name in LEGACY_DIRS and "padrao.json" in files:
+        if name in LEGACY_DIRS and os.path.isfile(os.path.join(folder, "padrao.json")):
             found.append(("legacy", os.path.join(folder, "padrao.json")))
-        elif STD_FILE in files:
+        elif OWN_DIR.match(name) and os.path.isfile(os.path.join(folder, STD_FILE)):
             found.append(("current", os.path.join(folder, STD_FILE)))
     found.sort(key=lambda item: (item[0] == "current", os.path.getmtime(item[1])), reverse=True)
     for kind, path in found:
         data = read_json(path)
         if isinstance(data, dict) and data.get("slots"):
-            return kind, data
+            return kind, dict(data, spoolman_url="", allow_conf_edit=False)
     return "", None
 
 
@@ -1131,6 +1191,8 @@ if orca is not None:
         def _restore_full(self, data):
             if not self.std["slots"]:
                 raise RuntimeError(self._t("err_empty"))
+            if not self.std.get("allow_conf_edit"):
+                raise RuntimeError(self._t("err_conf_edit_off"))
             if not self.std["printers"]:
                 raise RuntimeError(self._t("err_no_printers"))
             if data and "relaunch" in data:
@@ -1297,6 +1359,11 @@ textarea{width:100%;min-height:140px;font-family:Consolas,monospace;font-size:12
 <div class="row" style="margin-top:8px"><button class="sec" id="b-reset" data-i18n="reset"></button><span class="mute small" id="ver"></span></div>
 </div>
 
+<div class="card"><h2 data-i18n="full_section"></h2>
+<label class="small"><input type="checkbox" id="confedit"> <span data-i18n="allow_conf_edit"></span></label>
+<div class="mute small" style="margin-top:6px" data-i18n="allow_conf_edit_help"></div>
+</div>
+
 <div class="card"><h2 data-i18n="json"></h2>
 <div class="row"><button class="sec" id="b-export" data-i18n="json_export"></button><button class="sec" id="b-import" data-i18n="json_import"></button></div>
 <textarea id="json" style="margin-top:8px;display:none"></textarea>
@@ -1311,7 +1378,7 @@ const t=(k,a)=>{let s=T[k]||k;if(a)for(const x in a)s=s.split('{'+x+'}').join(a[
 const send=m=>orca.postMessage(m);
 const want=(s,n)=>(s.presets&&(s.presets[n]||s.presets['default']))||'';
 function collect(){return Object.assign({},S.std,{slots:slots,printers:printers,spoolman_url:$('url').value,
-  auto_new_project:$('auto').checked,relaunch:$('relaunch').checked,language:$('lang').value,sort_on_sync:$('sortsync').checked});}
+  auto_new_project:$('auto').checked,relaunch:$('relaunch').checked,allow_conf_edit:$('confedit').checked,language:$('lang').value,sort_on_sync:$('sortsync').checked});}
 function i18n(){document.querySelectorAll('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));
   document.querySelectorAll('[data-i18n-title]').forEach(e=>e.title=t(e.dataset.i18nTitle));
   $('pfilter').placeholder=t('filter');document.documentElement.lang=S.lang==='pt'?'pt-BR':'en';}
@@ -1343,9 +1410,10 @@ function render(){
   $('printers-help').textContent=t('printers_help',{nozzle:c.nozzle||'0.2'});
   renderPrinters();
   $('url').value=S.std.spoolman_url||'';$('lang').value=S.std.language||'auto';
-  $('auto').checked=!!S.std.auto_new_project;$('relaunch').checked=S.std.relaunch!==false;$('sortsync').checked=S.std.sort_on_sync!==false;
+  $('auto').checked=!!S.std.auto_new_project;$('confedit').checked=!!S.std.allow_conf_edit;$('relaunch').checked=S.std.relaunch!==false;$('sortsync').checked=S.std.sort_on_sync!==false;
   $('b-cancel').style.display=S.pending_job?'':'none';
   ['b-live','b-full','b-sync','b-capture'].forEach(id=>$(id).disabled=!!S.busy);
+  $('b-full').disabled=!!S.busy||!S.std.allow_conf_edit;
   $('ver').textContent='FilamentStandard v'+S.version;
   renderSync();
 }
@@ -1396,7 +1464,7 @@ $('pfilter').oninput=renderPrinters;
 $('b-add').onclick=()=>{slots.push({presets:{'default':''},color:'#FFFFFF',spool:null});render();};
 $('b-save').onclick=()=>send({cmd:'save_std',std:collect()});
 $('b-live').onclick=()=>send({cmd:'restore_live'});
-$('b-full').onclick=()=>send({cmd:'restore_full',relaunch:$('relaunch').checked});
+$('b-full').onclick=()=>{if(confirm(t('full_confirm')))send({cmd:'restore_full',relaunch:$('relaunch').checked});};
 $('b-cancel').onclick=()=>send({cmd:'cancel_full'});
 $('b-capture').onclick=()=>{if(confirm(t('capture_confirm')))send({cmd:'capture'});};
 $('b-sync').onclick=()=>send({cmd:'sync_preview'});
@@ -1404,7 +1472,7 @@ $('b-addprinter').onclick=()=>send({cmd:'add_current_printer'});
 $('b-reset').onclick=()=>{if(confirm(t('reset_confirm')))send({cmd:'reset'});};
 $('b-export').onclick=()=>{const j=$('json');j.style.display='';j.value=JSON.stringify(collect(),null,1);};
 $('b-import').onclick=()=>{const j=$('json');if(j.style.display==='none'){j.style.display='';j.value='';j.focus();return;}send({cmd:'import_json',text:j.value});};
-['auto','lang','sortsync'].forEach(id=>$(id).onchange=()=>send({cmd:'save_std',std:collect()}));
+['auto','lang','sortsync','confedit'].forEach(id=>$(id).onchange=()=>send({cmd:'save_std',std:collect()}));
 orca.onMessage(msg=>{
   if(!msg)return;
   if(msg.type==='state'){S=msg;T=msg.i18n||{};slots=JSON.parse(JSON.stringify(msg.std.slots));printers=JSON.parse(JSON.stringify(msg.std.printers||{}));render();}
@@ -1425,7 +1493,14 @@ def main(argv):
         std = clean_standard(read_json(argv[3]) or {})
         restore(argv[2], std)
         return 0
+    if len(argv) >= 4 and argv[1] == "--undo":
+        if orca_running():
+            print("Close OrcaSlicer first.")
+            return 2
+        undo(argv[2], argv[3])
+        return 0
     print("usage:\n  python filament_standard.py --apply <job.json>\n"
+          "  python filament_standard.py --undo <OrcaSlicer data dir> <backup folder>\n"
           "  python filament_standard.py --restore <OrcaSlicer data dir> <standard.json>")
     return 1
 

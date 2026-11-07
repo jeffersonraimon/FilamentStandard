@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.2.0] - 2026-11-07
+### Security and privacy
+- The full restore is **off by default**. It has to be enabled under *Full restore*, which explains what it changes, and it asks for confirmation each time.
+- The full restore changes only the `orca_presets` entries of the selected printers. Other keys of `OrcaSlicer.conf`, such as printer access codes, are written back unchanged and are never copied or logged.
+- Backups hold only the entries that change (`orca_presets.json`) and the filament presets whose price changes, no longer a copy of the whole `OrcaSlicer.conf`.
+- The first-run import reads only this plugin's own folders (`filamentos_padrao`, `filament_standard*`), never other plugins' data. It no longer carries over the Spoolman URL or the full-restore opt-in.
+
+### Added
+- `--undo <data dir> <backup folder>`: puts back what a full restore changed.
+
 ## [2.1.1] - 2026-11-07
 ### Changed
 - Release file renamed to `filament_standard_any.py`: Orca Cloud requires a target suffix (`_any` = every OS and architecture). The plain `filament_standard.py` is still attached to GitHub releases.
