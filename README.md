@@ -4,7 +4,7 @@
 
 **Keep one standard filament list for your printers in OrcaSlicer: same order, same colours and the right preset for each nozzle. Restore the list after opening someone else's project, and sync spools and prices from [Spoolman](https://github.com/Donkie/Spoolman).**
 
-[Leia em português](README.pt-BR.md)
+[Leia em português](README.pt-BR.md) · [Orca Cloud](https://cloud.orcaslicer.com/app/plugins/plugin-hub/5efa34d7-7154-4873-b400-676cdd23f4cb)
 
 [![CI](https://github.com/jeffersonraimon/FilamentStandard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jeffersonraimon/FilamentStandard/actions/workflows/ci.yml)
 
@@ -25,7 +25,7 @@ Both editions are built from the same source by `scripts/build_release.py`.
 
 | | **Cloud edition** `filament_standard_any.py` | **Full edition** `filament_standard.py` |
 |---|---|---|
-| Where | Orca Cloud | [GitHub releases](https://github.com/jeffersonraimon/FilamentStandard/releases/latest) |
+| Where | [Orca Cloud](https://cloud.orcaslicer.com/app/plugins/plugin-hub/5efa34d7-7154-4873-b400-676cdd23f4cb) | [GitHub releases](https://github.com/jeffersonraimon/FilamentStandard/releases/latest) |
 | Standard list, capture, live restore, apply prices, Spoolman sync, auto-restore | ✓ | ✓ |
 | Full restore (slot count and colours, by editing `OrcaSlicer.conf`) | – | ✓ (opt-in) |
 | Touches files outside its own data folder or starts programs | never | only the opt-in full restore |
@@ -62,7 +62,7 @@ The OrcaSlicer 2.5 plugin API can assign a preset to an **existing** slot (`orca
 
 ## Install
 
-1. Subscribe to **FilamentStandard** on Orca Cloud (cloud edition), or download the full edition [`filament_standard.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard.py).
+1. Subscribe to [**FilamentStandard** on Orca Cloud](https://cloud.orcaslicer.com/app/plugins/plugin-hub/5efa34d7-7154-4873-b400-676cdd23f4cb) (cloud edition), or download the full edition [`filament_standard.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard.py).
 2. In OrcaSlicer open **Plugins** → *More plugin install options* → **Install local plugin** and pick the file.
 3. Accept the permission prompts:
    - **threads**: for the live restore;

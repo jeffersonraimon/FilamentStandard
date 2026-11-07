@@ -4,7 +4,7 @@
 
 **Mantenha uma lista padrão de filamentos para as suas impressoras no OrcaSlicer: mesma ordem, mesmas cores e o perfil certo para cada bico. Restaure a lista depois de abrir projetos de outras pessoas e sincronize carretéis e preços com o [Spoolman](https://github.com/Donkie/Spoolman).**
 
-[Read in English](README.md)
+[Read in English](README.md) · [Orca Cloud](https://cloud.orcaslicer.com/app/plugins/plugin-hub/5efa34d7-7154-4873-b400-676cdd23f4cb)
 
 [![CI](https://github.com/jeffersonraimon/FilamentStandard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jeffersonraimon/FilamentStandard/actions/workflows/ci.yml)
 
@@ -25,7 +25,7 @@ As duas edições são geradas do mesmo código pelo `scripts/build_release.py`.
 
 | | **Edição Cloud** `filament_standard_any.py` | **Edição completa** `filament_standard.py` |
 |---|---|---|
-| Onde | Orca Cloud | [Releases do GitHub](https://github.com/jeffersonraimon/FilamentStandard/releases/latest) |
+| Onde | [Orca Cloud](https://cloud.orcaslicer.com/app/plugins/plugin-hub/5efa34d7-7154-4873-b400-676cdd23f4cb) | [Releases do GitHub](https://github.com/jeffersonraimon/FilamentStandard/releases/latest) |
 | Lista padrão, captura, restauração ao vivo, aplicar preços, Spoolman, restauração automática | ✓ | ✓ |
 | Restauração completa (quantidade de slots e cores, editando o `OrcaSlicer.conf`) | – | ✓ (opcional) |
 | Mexe em arquivos fora da própria pasta de dados ou executa programas | nunca | só a restauração completa opcional |
@@ -62,7 +62,7 @@ A API do OrcaSlicer 2.5 consegue trocar o perfil de um slot **que já existe** (
 
 ## Instalação
 
-1. Assine o **FilamentStandard** no Orca Cloud (edição Cloud), ou baixe a edição completa [`filament_standard.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard.py).
+1. Assine o [**FilamentStandard** no Orca Cloud](https://cloud.orcaslicer.com/app/plugins/plugin-hub/5efa34d7-7154-4873-b400-676cdd23f4cb) (edição Cloud), ou baixe a edição completa [`filament_standard.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard.py).
 2. No OrcaSlicer, abra **Plugins** → *More plugin install options* → **Install local plugin** e escolha o arquivo.
 3. Aceite os pedidos de permissão:
    - **threads**: para a restauração ao vivo;
