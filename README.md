@@ -10,6 +10,8 @@
 
 > An OrcaSlicer **2.5+** Python plugin. It is a single file, `filament_standard.py`, and has no dependencies.
 
+<p align="center"><img src="assets/screenshot.png" alt="FilamentStandard tab in OrcaSlicer: the standard list with a preset per nozzle, the colour of each slot and what the current project has" width="900"></p>
+
 ## Why
 
 OrcaSlicer keeps one filament list per printer profile, in `orca_presets` inside `OrcaSlicer.conf`. Two things break that list:

@@ -10,6 +10,8 @@
 
 > Plugin Python para o OrcaSlicer **2.5+**. É um arquivo só, `filament_standard.py`, e não tem dependências.
 
+<p align="center"><img src="assets/screenshot.png" alt="Aba do FilamentStandard no OrcaSlicer: a lista padrão com o perfil por bico, a cor de cada slot e o que o projeto atual tem" width="900"></p>
+
 ## Por quê
 
 O OrcaSlicer guarda uma lista de filamentos por perfil de impressora, em `orca_presets` dentro do `OrcaSlicer.conf`. Duas coisas bagunçam essa lista:
