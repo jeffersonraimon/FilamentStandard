@@ -4,7 +4,7 @@
 
 [Read in English](README.md)
 
-![CI](https://github.com/jeffersonraimon/FilamentStandard/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/jeffersonraimon/FilamentStandard/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jeffersonraimon/FilamentStandard/actions/workflows/ci.yml)
 
 > Plugin Python para o OrcaSlicer **2.5+**. É um arquivo só, `filament_standard.py`, e não tem dependências.
 
