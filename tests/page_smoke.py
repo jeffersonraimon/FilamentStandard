@@ -6,6 +6,7 @@ It prints the messages the page sent and any JavaScript error.
 """
 import json
 import os
+import pathlib
 import shutil
 import subprocess
 import sys
@@ -59,8 +60,14 @@ def run(edition):
     path = os.path.join(folder, "page.html")
     with open(path, "w", encoding="utf-8") as stream:
         stream.write(page)
-    dom = subprocess.run([browser, "--headless=new", "--disable-gpu", "--dump-dom", "file:///" + path.replace("\\", "/")],
-                         capture_output=True, text=True, encoding="utf-8", timeout=60).stdout
+    args = [browser, "--headless=new", "--disable-gpu", "--dump-dom"]
+    if os.name != "nt":
+        args += ["--no-sandbox", "--disable-dev-shm-usage"]  # CI containers
+    proc = subprocess.run(args + [pathlib.Path(path).as_uri()],
+                          capture_output=True, text=True, encoding="utf-8", timeout=90)
+    dom = proc.stdout
+    if 'data-result="' not in dom:
+        raise RuntimeError("the browser did not render the page: %s" % proc.stderr[-2000:])
     start = dom.index('data-result="') + len('data-result="')
     raw = dom[start:dom.index('"', start)].replace("&quot;", '"').replace("&amp;", "&")
     return json.loads(raw)
