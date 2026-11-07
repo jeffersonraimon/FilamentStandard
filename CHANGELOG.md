@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [3.0.2] - 2026-11-07
+### Fixed
+- **Settings on a fresh install:** with an empty list, changing the language or the Spoolman URL did nothing, and *Sync with Spoolman* cleared the URL and said it was not set. The settings were saved through *Save standard*, which refuses an empty list. They now save on their own, and syncing works with an empty list, which is a good way to build the list from Spoolman.
+- **Unsaved edits:** changing a setting no longer discards edits to the list that you have not saved yet.
+
 ## [3.0.1] - 2026-11-07
 ### Changed
 - Releases now go out through `.github/workflows/publish-orcacloud.yml`, which runs when a GitHub release is **published**. Orca Cloud accepts only the OIDC token of that connected release workflow. The workflow tests the code, builds both editions, attaches them to the release and uploads the cloud edition to Orca Cloud. `ci.yml` only runs the tests.

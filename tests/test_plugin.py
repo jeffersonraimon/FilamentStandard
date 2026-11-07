@@ -334,3 +334,47 @@ def test_apply_prices_through_the_api(plugin):
     host.slots = ["Generic PLA"]
     page.on_message({"cmd": "apply_prices"})
     assert page.state()["status"] == "No preset in the current project has a different price."
+
+
+def test_settings_save_without_a_list(plugin, monkeypatch):
+    """First run (empty list): the language and the Spoolman URL must still be saved."""
+    module, page, host = plugin
+    page.on_message({"cmd": "save_settings", "settings": {"language": "pt", "spoolman_url": " http://s.local:7912 ",
+                                                          "slots": "ignored", "prices": "ignored"}})
+    state = page.state()
+    assert not state["error"]
+    assert state["lang"] == "pt" and state["std"]["spoolman_url"] == "http://s.local:7912"
+    assert state["std"]["slots"] == [] and state["slots_changed"] is False
+    saved = json.load(open(os.path.join(host.storage_dir, module.STD_FILE), encoding="utf-8"))
+    assert saved["language"] == "pt" and saved["spoolman_url"] == "http://s.local:7912"
+    page.on_message({"cmd": "save_settings", "settings": {"language": "en"}})
+    assert page.state()["i18n"]["save"] == "Save standard"
+    monkeypatch.setattr(module, "fetch_spools", lambda url: [spool(1, "Acme", "PLA Basic", "PLA", "FFFFFF", 100)])
+    page.on_message({"cmd": "sync_preview", "consent": True})
+    state = page.state()
+    assert not state["error"] and [u["id"] for u in state["proposal"]["unmapped"]] == [1]
+
+
+def test_settings_keep_the_list_and_fill_nozzles(plugin):
+    module, page, host = plugin
+    page.std = module.clean_standard({"slots": [{"presets": {"default": "PLA A"}}]})
+    page.on_message({"cmd": "save_settings", "settings": {"printers": {"Bambu Lab A1 0.2 nozzle": ""}, "auto_new_project": True}})
+    std = page.state()["std"]
+    assert std["slots"][0]["presets"] == {"default": "PLA A"}
+    assert std["printers"] == {"Bambu Lab A1 0.2 nozzle": "0.2"} and std["auto_new_project"] is True
+
+
+def test_slots_changed_flag(plugin):
+    module, page, host = plugin
+    page.on_message({"cmd": "ready"})
+    host.slots = ["PLA A"]
+    page.on_message({"cmd": "capture"})
+    assert page.state()["slots_changed"] is True
+    page.on_message({"cmd": "ready"})
+    assert page.state()["slots_changed"] is False
+
+
+def test_page_saves_settings_separately(plugin):
+    module, page, host = plugin
+    assert module.PAGE.count("cmd:'save_std'") == 1  # only the "Save standard" button
+    assert "cmd:'save_settings'" in module.PAGE

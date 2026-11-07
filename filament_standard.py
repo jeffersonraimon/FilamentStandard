@@ -7,7 +7,7 @@
 # name = "FilamentStandard"
 # description = "Keep a standard filament list (order, per-nozzle presets and colours) for your printers, restore it after opening projects, and sync spools and prices from Spoolman. English / Português."
 # author = "Jefferson J. Raimon"
-# version = "3.0.1"
+# version = "3.0.2"
 # ///
 """FilamentStandard - an OrcaSlicer plugin.
 
@@ -67,7 +67,7 @@ try:
 except ImportError:  # tests and the stand-alone helper
     orca = None
 
-VERSION = "3.0.1"
+VERSION = "3.0.2"
 # "full" (GitHub) or "cloud" (Orca Cloud): scripts/build_release.py removes the full-only blocks
 EDITION = "full"
 STD_FILE = "standard.json"
@@ -188,7 +188,7 @@ STRINGS = {
         "msg_full_cancelled": "Scheduled restore cancelled (the helper exits without changing anything).",
         # <<< full-edition
         "msg_sync": "Spoolman: {spools} active spools. {added} new, {removed} removed, {recolored} colour change(s), {prices} price change(s), {unmapped} without a preset.",
-        "msg_sync_applied": "Standard updated from Spoolman ({n} slots). Prices reach the presets on the next full restore.",
+        "msg_sync_applied": "Standard updated from Spoolman ({n} slots). Use \"Apply prices to presets\" to write the prices.",
         "msg_reset": "Everything was reset.",
         "msg_imported": "JSON imported ({n} slots).",
         "err_busy": "A restore is already running",
@@ -307,7 +307,7 @@ STRINGS = {
         "msg_full_cancelled": "Restauração agendada cancelada (o auxiliar encerra sem alterar nada).",
         # <<< full-edition
         "msg_sync": "Spoolman: {spools} carretéis ativos. {added} novo(s), {removed} removido(s), {recolored} cor(es) alterada(s), {prices} preço(s) alterado(s), {unmapped} sem perfil.",
-        "msg_sync_applied": "Padrão atualizado pelo Spoolman ({n} slots). Os preços vão para os perfis na próxima restauração completa.",
+        "msg_sync_applied": "Padrão atualizado pelo Spoolman ({n} slots). Use \"Aplicar preços aos perfis\" para gravar os preços.",
         "msg_reset": "Tudo foi apagado.",
         "msg_imported": "JSON importado ({n} slots).",
         "err_busy": "Já existe uma restauração em andamento",
@@ -326,6 +326,10 @@ STRINGS = {
     },
 }
 LANGUAGES = ("en", "pt")
+
+
+# settings the page saves on their own, without touching (or requiring) the slot list
+SETTING_KEYS = ("spoolman_url", "language", "auto_new_project", "relaunch", "sort_on_sync", "allow_conf_edit", "printers")
 
 
 def language_for(code):
@@ -1038,6 +1042,7 @@ if orca is not None:
             self.worker = None
             self.pending_job = False
             self.app_lang = "en"
+            self.slots_changed = False  # tells the page to drop its unsaved edits of the list
 
         # ---- basics
         def get_name(self):
@@ -1106,6 +1111,7 @@ if orca is not None:
                     self.std = (migrate_legacy(previous, self._printer_names()) if kind == "legacy"
                                 else clean_standard(previous))
                     self._save()
+                    self.slots_changed = True
                     self.status = self._t("migrated", n=len(self.std["slots"]))
                 # <<< full-edition
             self.pending_job = os.path.exists(self._storage(JOB_FILE))
@@ -1158,8 +1164,9 @@ if orca is not None:
                 "status": self.status, "error": self.error, "busy": self.busy, "pending_job": self.pending_job,
                 "current": {"machine": machine, "nozzle": nozzle, "names": names, "colors": colors},
                 "presets": self._filament_names(), "printers": self._printer_names(),
-                "version": VERSION, "lang": lang, "i18n": STRINGS[lang],
+                "version": VERSION, "lang": lang, "i18n": STRINGS[lang], "slots_changed": self.slots_changed,
             })
+            self.slots_changed = False
 
         # ---- messages from the page (UI thread)
         def on_message(self, data):
@@ -1174,6 +1181,7 @@ if orca is not None:
                     handler = {
                         "ready": lambda d: None,
                         "save_std": self._save_std,
+                        "save_settings": self._save_settings,
                         "capture": lambda d: self._capture(),
                         "restore_live": lambda d: self._restore_live(),
                         # >>> full-edition
@@ -1196,15 +1204,27 @@ if orca is not None:
                     self.error = str(exc)
                 self._push()
 
+        def _fill_nozzles(self, std):
+            for name in std["printers"]:
+                if not std["printers"][name]:
+                    std["printers"][name] = self._printer_nozzle(name)
+
+        def _save_settings(self, data):
+            """Save the settings only; an empty slot list (first run) is fine here."""
+            settings = {k: v for k, v in (data.get("settings") or {}).items() if k in SETTING_KEYS}
+            std = clean_standard(dict(self.std, **settings))
+            self._fill_nozzles(std)
+            self.std = std
+            self._save()
+
         def _save_std(self, data):
             std = clean_standard(dict(data.get("std") or {}, spool_map=self.std["spool_map"], prices=self.std["prices"]))
             if not std["slots"]:
                 raise RuntimeError(self._t("err_empty"))
-            for name in std["printers"]:
-                if not std["printers"][name]:
-                    std["printers"][name] = self._printer_nozzle(name)
+            self._fill_nozzles(std)
             self.std = std
             self._save()
+            self.slots_changed = True
             self.status = self._t("msg_saved", n=len(std["slots"]))
 
         def _import_json(self, data):
@@ -1218,12 +1238,14 @@ if orca is not None:
                 "p04" in s for s in parsed.get("slots", [])) else clean_standard(parsed)
             self.std = std
             self._save()
+            self.slots_changed = True
             self.status = self._t("msg_imported", n=len(std["slots"]))
 
         def _reset(self):
             self.std = empty_standard()
             self.proposal = None
             self._save()
+            self.slots_changed = True
             self.status = self._t("msg_reset")
 
         def _add_current_printer(self):
@@ -1255,6 +1277,7 @@ if orca is not None:
             if machine:
                 self.std["printers"].setdefault(machine, nozzle)
             self._save()
+            self.slots_changed = True
             self.status = self._t("msg_captured", n=len(slots), machine=machine or "?", column=column)
 
         # ---- live restore (presets per slot)
@@ -1380,6 +1403,7 @@ if orca is not None:
             self.std["prices"] = self.proposal["prices"]
             self._save()
             self.proposal = None
+            self.slots_changed = True
             self.status = self._t("msg_sync_applied", n=len(self.std["slots"]))
 
         # ---- prices (through the API, as unsaved edits)
@@ -1550,6 +1574,10 @@ const send=m=>orca.postMessage(m);
 const chk=(id,d)=>$(id)?$(id).checked:d;
 const origin=u=>{try{const x=new URL(u);return /^https?:$/.test(x.protocol)?x.origin:'';}catch(e){return '';}};
 const want=(s,n)=>(s.presets&&(s.presets[n]||s.presets['default']))||'';
+let dirty=false;
+function settings(){return {spoolman_url:$('url').value.trim(),language:$('lang').value,auto_new_project:$('auto').checked,
+  sort_on_sync:$('sortsync').checked,relaunch:chk('relaunch',S.std.relaunch!==false),allow_conf_edit:chk('confedit',!!S.std.allow_conf_edit),printers:printers};}
+const saveSettings=()=>send({cmd:'save_settings',settings:settings()});
 function collect(){return Object.assign({},S.std,{slots:slots,printers:printers,spoolman_url:$('url').value,
   auto_new_project:$('auto').checked,relaunch:chk('relaunch',S.std.relaunch!==false),allow_conf_edit:chk('confedit',!!S.std.allow_conf_edit),language:$('lang').value,sort_on_sync:$('sortsync').checked});}
 function i18n(){document.querySelectorAll('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));
@@ -1627,38 +1655,43 @@ function renderSync(){
     send({cmd:'sync_apply',map:map});};
   $('b-sync-no').onclick=()=>send({cmd:'sync_discard'});
 }
-$('rows').addEventListener('input',e=>{const el=e.target,i=+el.dataset.i;if(isNaN(i))return;
+$('rows').addEventListener('input',e=>{const el=e.target,i=+el.dataset.i;if(isNaN(i))return;dirty=true;
   if(el.dataset.v){slots[i].presets=slots[i].presets||{};slots[i].presets[el.dataset.v]=el.value;}else slots[i][el.dataset.k]=el.value;});
 $('rows').addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const i=+b.dataset.i;
+  dirty=true;
   if(b.dataset.a==='del')slots.splice(i,1);
   else{const j=b.dataset.a==='up'?i-1:i+1;if(j<0||j>=slots.length)return;[slots[i],slots[j]]=[slots[j],slots[i]];}
   render();});
 $('plist').addEventListener('change',e=>{const el=e.target;
   if(el.dataset.p){if(el.checked)printers[el.dataset.p]='';else delete printers[el.dataset.p];renderPrinters();}
-  else if(el.dataset.pn)printers[el.dataset.pn]=el.value.trim();});
+  else if(el.dataset.pn)printers[el.dataset.pn]=el.value.trim();
+  saveSettings();});
 $('pfilter').oninput=renderPrinters;
-$('b-add').onclick=()=>{slots.push({presets:{'default':''},color:'#FFFFFF',spool:null});render();};
+$('b-add').onclick=()=>{dirty=true;slots.push({presets:{'default':''},color:'#FFFFFF',spool:null});render();};
 $('b-save').onclick=()=>send({cmd:'save_std',std:collect()});
 $('b-live').onclick=()=>send({cmd:'restore_live'});
 // >>> full-edition
 $('b-full').onclick=()=>{if(confirm(t('full_confirm')))send({cmd:'restore_full',relaunch:$('relaunch').checked});};
 $('b-cancel').onclick=()=>send({cmd:'cancel_full'});
-$('confedit').onchange=()=>send({cmd:'save_std',std:collect()});
+$('confedit').onchange=saveSettings;
 // <<< full-edition
 $('b-capture').onclick=()=>{if(confirm(t('capture_confirm')))send({cmd:'capture'});};
 $('b-sync').onclick=()=>{const u=$('url').value.trim(),o=origin(u);
   if(o&&S.std.spoolman_consent!==o){if(!confirm(t('spoolman_confirm',{url:o})))return;
-    send({cmd:'save_std',std:collect()});send({cmd:'sync_preview',consent:true});return;}
-  send({cmd:'sync_preview'});};
+    saveSettings();send({cmd:'sync_preview',consent:true});return;}
+  saveSettings();send({cmd:'sync_preview'});};
 $('b-prices').onclick=()=>send({cmd:'apply_prices'});
 $('b-addprinter').onclick=()=>send({cmd:'add_current_printer'});
 $('b-reset').onclick=()=>{if(confirm(t('reset_confirm')))send({cmd:'reset'});};
 $('b-export').onclick=()=>{const j=$('json');j.style.display='';j.value=JSON.stringify(collect(),null,1);};
 $('b-import').onclick=()=>{const j=$('json');if(j.style.display==='none'){j.style.display='';j.value='';j.focus();return;}send({cmd:'import_json',text:j.value});};
-['auto','lang','sortsync'].forEach(id=>$(id).onchange=()=>send({cmd:'save_std',std:collect()}));
+['auto','lang','sortsync','url'].forEach(id=>$(id).onchange=saveSettings);
 orca.onMessage(msg=>{
   if(!msg)return;
-  if(msg.type==='state'){S=msg;T=msg.i18n||{};slots=JSON.parse(JSON.stringify(msg.std.slots));printers=JSON.parse(JSON.stringify(msg.std.printers||{}));render();}
+  if(msg.type==='state'){const first=!S;S=msg;T=msg.i18n||{};
+    // keep the list the user is editing unless the plugin replaced it (save, capture, sync, import, reset)
+    if(first||msg.slots_changed||!dirty){slots=JSON.parse(JSON.stringify(msg.std.slots));dirty=false;}
+    printers=JSON.parse(JSON.stringify(msg.std.printers||{}));render();}
   else if(msg.type==='refresh_request')send({cmd:'ready'});
   else if(msg.type==='auto_request')send({cmd:'restore_live'});
 });

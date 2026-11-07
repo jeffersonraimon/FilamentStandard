@@ -97,8 +97,11 @@ def test_cloud_edition_works(cloud, monkeypatch):
     assert host.slots == ["PLA A", "PLA B"]
     page.on_message({"cmd": "restore_full"})
     assert page.messages[-1]["error"] == "unknown command: restore_full"
+    # settings save on a fresh install too (the 3.0.1 bug: an empty list blocked them)
+    page.on_message({"cmd": "reset"})
+    page.on_message({"cmd": "save_settings", "settings": {"language": "pt", "spoolman_url": "http://spoolman.local:7912"}})
+    assert page.messages[-1]["lang"] == "pt" and not page.messages[-1]["error"]
     # Spoolman: asks before the first connection
-    page.std["spoolman_url"] = "http://spoolman.local:7912"
     monkeypatch.setattr(module, "fetch_spools", lambda url: [spool(1, "Acme", "PLA Basic", "PLA", "FFFFFF", 100)])
     page.on_message({"cmd": "sync_preview"})
     assert page.messages[-1]["proposal"] is None and "Spoolman" in page.messages[-1]["error"]
