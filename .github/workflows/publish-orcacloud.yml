@@ -1,0 +1,67 @@
+name: Publish to OrcaCloud
+
+# Runs when a GitHub release is published (by a person or with a personal token: releases created
+# with GITHUB_TOKEN do not trigger workflows). Orca Cloud only accepts the OIDC token of this
+# connected release workflow.
+on:
+  release:
+    types: [published]
+
+permissions:
+  id-token: write # Orca Cloud authenticates the upload with GitHub OIDC (no secrets)
+  contents: write # attach the built files to the release
+
+env:
+  # Space-separated globs matching the plugin files to upload (.whl / .py).
+  PLUGIN_FILES: "dist/filament_standard_any.py"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test
+        run: |
+          python -m pip install pytest
+          python -m pytest
+
+      # Checks the tag against VERSION, builds the cloud and full editions and the notes.
+      - name: Build release files
+        run: python scripts/build_release.py "${GITHUB_REF_NAME}"
+
+      - name: Attach the files to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/filament_standard_any.py dist/filament_standard.py --clobber
+
+      - name: Publish release to OrcaCloud
+        if: vars.ORCACLOUD_PUBLISH == 'true'
+        run: |
+          set -euo pipefail
+          oidc_token="$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=orcacloud" | jq -r .value)"
+          version="${GITHUB_REF_NAME#v}"
+          changelog="$(jq -r '.release.body // ""' "$GITHUB_EVENT_PATH" | head -c 4000)"
+          metadata="$(jq -cn --arg version "$version" --arg changelog "$changelog" \
+            '{version: $version} + (if $changelog == "" then {} else {changelog: $changelog} end)')"
+          args=(-F "metadata=$metadata")
+          shopt -s nullglob
+          for file in $PLUGIN_FILES; do
+            args+=(-F "files=@$file")
+          done
+          if [ "${#args[@]}" -eq 1 ]; then
+            echo "No plugin files matched: $PLUGIN_FILES" >&2
+            exit 1
+          fi
+          status="$(curl -sS -o response.json -w '%{http_code}' \
+            -H "Authorization: Bearer $oidc_token" \
+            "${args[@]}" \
+            https://api.orcaslicer.com/api/v1/plugin-publish/releases)"
+          cat response.json
+          echo
+          [ "$status" = "201" ]

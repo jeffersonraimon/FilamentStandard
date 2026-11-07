@@ -7,7 +7,7 @@
 # name = "FilamentStandard"
 # description = "Keep a standard filament list (order, per-nozzle presets and colours) for your printers, restore it after opening projects, and sync spools and prices from Spoolman. English / Português."
 # author = "Jefferson J. Raimon"
-# version = "3.0.0"
+# version = "3.0.1"
 # ///
 """FilamentStandard - an OrcaSlicer plugin.
 
@@ -67,7 +67,7 @@ try:
 except ImportError:  # tests and the stand-alone helper
     orca = None
 
-VERSION = "3.0.0"
+VERSION = "3.0.1"
 # "full" (GitHub) or "cloud" (Orca Cloud): scripts/build_release.py removes the full-only blocks
 EDITION = "full"
 STD_FILE = "standard.json"
