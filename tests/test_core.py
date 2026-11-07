@@ -135,7 +135,7 @@ def test_header_metadata(fs):
 
 
 def test_storage_and_data_dir_paths(fs):
-    base = os.path.join("C:" + os.sep, "Users", "u", "AppData", "Roaming", "OrcaSlicer")
+    base = os.path.abspath(os.path.join(os.sep, "data", "u", "OrcaSlicer"))  # absolute on every OS
     local = os.path.join(base, "orca_plugins", "filament_standard.py", "filament_standard.py")
     assert fs.storage_from(local) == os.path.join(base, "orca_plugins", "plugin_data", "filament_standard")
     assert fs.data_dir_from(local) == base
