@@ -7,7 +7,7 @@
 # name = "FilamentStandard"
 # description = "Keep a standard filament list (order, per-nozzle presets and colours) for your printers, restore it after opening projects, and sync spools and prices from Spoolman. English / Português."
 # author = "Jefferson J. Raimon"
-# version = "3.0.2"
+# version = "3.0.3"
 # ///
 """FilamentStandard - an OrcaSlicer plugin.
 
@@ -67,7 +67,7 @@ try:
 except ImportError:  # tests and the stand-alone helper
     orca = None
 
-VERSION = "3.0.2"
+VERSION = "3.0.3"
 # "full" (GitHub) or "cloud" (Orca Cloud): scripts/build_release.py removes the full-only blocks
 EDITION = "full"
 STD_FILE = "standard.json"
@@ -120,6 +120,7 @@ STRINGS = {
         "col_color": "Colour",
         "col_variant_default": "Preset (default)",
         "col_variant": "Preset {nozzle} mm",
+        "uses_default": "Empty: this nozzle uses the default preset (shown in grey). Fill it only when the nozzle needs a different preset.",
         "col_spool": "Spool",
         "col_project": "Current project",
         "add_slot": "Add slot",
@@ -239,6 +240,7 @@ STRINGS = {
         "col_color": "Cor",
         "col_variant_default": "Perfil (padrão)",
         "col_variant": "Perfil {nozzle} mm",
+        "uses_default": "Vazio: este bico usa o perfil padrão (mostrado em cinza). Preencha só quando o bico precisar de outro perfil.",
         "col_spool": "Carretel",
         "col_project": "Projeto atual",
         "add_slot": "Adicionar slot",
@@ -409,6 +411,52 @@ def variants_of(std):
         keys.update(k for k in slot_presets(slot) if k != DEFAULT_VARIANT)
     keys.discard("")
     return [DEFAULT_VARIANT] + sorted(keys, key=float)
+
+
+def variant_names(name, nozzle):
+    """Names a nozzle-specific variant of ``name`` usually has: "X 0.2", "X 0.2 nozzle", "X @BBL A1 0.2 nozzle"."""
+    nozzle = norm_nozzle(nozzle)
+    if not name or not nozzle:
+        return []
+    names = [name + " " + nozzle, name + " " + nozzle + " nozzle", name + " " + nozzle + "mm"]
+    swapped = re.sub(r"\d+(?:\.\d+)?\s*nozzle$", nozzle + " nozzle", name)  # "... 0.4 nozzle" -> "... 0.2 nozzle"
+    if swapped != name:
+        names.insert(0, swapped)
+    return names
+
+
+def base_name(name, nozzle, available):
+    """The default preset a nozzle variant belongs to ("Multfila PLA 0.2" -> "MULTFILA PLA"), or ""."""
+    lookup = {a.lower(): a for a in available}
+    nozzle = norm_nozzle(nozzle)
+    for pattern in (r"\s+%s\s*(?:mm|nozzle)?$", r"\s+%s\s*nozzle$"):
+        stripped = re.sub(pattern % re.escape(nozzle), "", name or "", flags=re.I)
+        if stripped != name and stripped.lower() in lookup:
+            return lookup[stripped.lower()]
+    return ""
+
+
+def fill_variants(slots, nozzles, available):
+    """Fill empty nozzle columns with presets that exist under the usual variant names (case-insensitive).
+
+    Returns how many cells were filled. Columns already set are never changed.
+    """
+    lookup = {a.lower(): a for a in available}
+    filled = 0
+    for slot in slots:
+        presets = slot.setdefault("presets", {})
+        default = presets.get(DEFAULT_VARIANT)
+        for nozzle in nozzles:
+            nozzle = norm_nozzle(nozzle)
+            if not nozzle or presets.get(nozzle):
+                continue
+            for candidate in variant_names(default, nozzle):
+                hit = lookup.get(candidate.lower())
+                if hit and hit != default:
+                    presets[nozzle] = hit
+                    filled += 1
+                    break
+    return filled
 
 
 def clean_standard(data):
@@ -1209,12 +1257,19 @@ if orca is not None:
                 if not std["printers"][name]:
                     std["printers"][name] = self._printer_nozzle(name)
 
+        def _fill_variants(self):
+            """Fill empty nozzle columns from the preset names that exist (e.g. "X 0.2" for the 0.2 column)."""
+            nozzles = [v for v in variants_of(self.std) if v != DEFAULT_VARIANT]
+            if fill_variants(self.std["slots"], nozzles, self._filament_names()):
+                self.slots_changed = True
+
         def _save_settings(self, data):
             """Save the settings only; an empty slot list (first run) is fine here."""
             settings = {k: v for k, v in (data.get("settings") or {}).items() if k in SETTING_KEYS}
             std = clean_standard(dict(self.std, **settings))
             self._fill_nozzles(std)
             self.std = std
+            self._fill_variants()  # a new printer may bring a new nozzle column
             self._save()
 
         def _save_std(self, data):
@@ -1271,11 +1326,16 @@ if orca is not None:
                     pool.remove(old)
                 presets = dict(slot_presets(old)) if old else {}
                 presets[column] = name
+                if column == DEFAULT_VARIANT and nozzle and not old:
+                    base = base_name(name, nozzle, self._filament_names())
+                    if base:  # captured on a 0.2 printer: "Multfila PLA 0.2" -> default "MULTFILA PLA"
+                        presets = {DEFAULT_VARIANT: base, nozzle: name}
                 presets.setdefault(DEFAULT_VARIANT, name)
                 slots.append({"presets": presets, "color": color, "spool": (old or {}).get("spool")})
             self.std["slots"] = slots
             if machine:
                 self.std["printers"].setdefault(machine, nozzle)
+            self._fill_variants()
             self._save()
             self.slots_changed = True
             self.status = self._t("msg_captured", n=len(slots), machine=machine or "?", column=column)
@@ -1401,6 +1461,7 @@ if orca is not None:
                 self.proposal = plan_sync(self.std, fetch_spools(self.std["spoolman_url"]))
             self.std["slots"] = self.proposal["slots"]
             self.std["prices"] = self.proposal["prices"]
+            self._fill_variants()
             self._save()
             self.proposal = None
             self.slots_changed = True
@@ -1603,7 +1664,8 @@ function render(){
       (have===w&&(hc||'').toUpperCase()===(s.color||'').toUpperCase()?'<span class="ok">'+esc(t('ok'))+'</span>':
       '<span class="diff" title="'+esc(have)+' '+esc(hc||'')+'">'+(hc?'<span class="sw" style="background:'+esc(hc)+'"></span> ':'')+esc(have)+'</span>');
     return '<tr><td>'+(i+1)+'</td><td><input type="color" data-i="'+i+'" data-k="color" value="'+esc(s.color)+'"></td>'+
-      V.map(v=>'<td><input type="text" list="presets" data-i="'+i+'" data-v="'+esc(v)+'" value="'+esc((s.presets||{})[v]||'')+'"></td>').join('')+
+      V.map(v=>'<td><input type="text" list="presets" data-i="'+i+'" data-v="'+esc(v)+'" value="'+esc((s.presets||{})[v]||'')+'"'+
+        (v==='default'?'':' placeholder="'+esc(want(s,''))+'" title="'+esc(t('uses_default'))+'"')+'></td>').join('')+
       '<td><input type="text" class="num" data-i="'+i+'" data-k="spool" value="'+esc(s.spool==null?'':s.spool)+'"></td>'+
       '<td class="small">'+st+'</td><td style="white-space:nowrap">'+
       '<button class="sec mini" data-a="up" data-i="'+i+'">↑</button> <button class="sec mini" data-a="down" data-i="'+i+'">↓</button> '+

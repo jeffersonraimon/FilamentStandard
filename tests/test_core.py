@@ -169,3 +169,34 @@ def test_example_standard_is_valid(fs):
     std = fs.clean_standard(raw)
     assert len(std["slots"]) == len(raw["slots"])
     assert fs.variants_of(std) == ["default", "0.2", "0.4", "0.6"]
+
+
+
+def test_variant_names(fs):
+    assert fs.variant_names("Multfila PLA", "0.2") == ["Multfila PLA 0.2", "Multfila PLA 0.2 nozzle", "Multfila PLA 0.2mm"]
+    assert fs.variant_names("Generic PLA @BBL A1 0.4 nozzle", "0.2")[0] == "Generic PLA @BBL A1 0.2 nozzle"
+    assert fs.variant_names("", "0.2") == [] and fs.variant_names("X", "") == []
+
+
+def test_fill_variants(fs):
+    available = ["MULTFILA PLA", "Multfila PLA 0.2", "Generic PLA @BBL A1", "Generic PLA @BBL A1 0.2 nozzle",
+                 "ELEGOO PLA", "BELQQ PLA+", "BELQQ PLA+ 0.2"]
+    slots = [
+        {"presets": {"default": "MULTFILA PLA"}},                       # case differs: still found
+        {"presets": {"default": "Generic PLA @BBL A1"}},                # system naming
+        {"presets": {"default": "ELEGOO PLA"}},                         # no variant: stays empty
+        {"presets": {"default": "BELQQ PLA+", "0.2": "Custom 0.2"}},    # set by the user: kept
+    ]
+    assert fs.fill_variants(slots, ["0.2", "0.4"], available) == 2
+    assert slots[0]["presets"] == {"default": "MULTFILA PLA", "0.2": "Multfila PLA 0.2"}
+    assert slots[1]["presets"]["0.2"] == "Generic PLA @BBL A1 0.2 nozzle"
+    assert slots[2]["presets"] == {"default": "ELEGOO PLA"}
+    assert slots[3]["presets"]["0.2"] == "Custom 0.2"
+    assert "0.4" not in slots[0]["presets"]  # no "MULTFILA PLA 0.4": the 0.4 nozzle uses the default
+
+
+def test_base_name(fs):
+    available = ["MULTFILA PLA", "Multfila PLA 0.2", "Generic PLA @BBL A1", "Generic PLA @BBL A1 0.2 nozzle"]
+    assert fs.base_name("Multfila PLA 0.2", "0.2", available) == "MULTFILA PLA"
+    assert fs.base_name("Generic PLA @BBL A1 0.2 nozzle", "0.2", available) == "Generic PLA @BBL A1"
+    assert fs.base_name("MULTFILA PLA", "0.2", available) == ""

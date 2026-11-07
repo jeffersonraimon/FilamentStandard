@@ -45,6 +45,7 @@ def test_capture_and_save(plugin):
     host.colors = ["#FFFFFF", "#000000", "#FF0000"]
     page.on_message({"cmd": "capture"})
     std = page.state()["std"]
+    # only a 0.4 printer so far: no 0.2 column to fill yet
     assert [s["presets"] for s in std["slots"]] == [{"default": "PLA A"}, {"default": "PLA B"}, {"default": "PLA A"}]
     assert [s["color"] for s in std["slots"]] == ["#FFFFFF", "#000000", "#FF0000"]
     assert std["printers"] == {"Bambu Lab A1 0.4 nozzle": "0.4"}
@@ -87,6 +88,28 @@ def test_capture_on_a_nozzle_column(plugin):
     page.on_message({"cmd": "capture"})
     assert page.state()["std"]["slots"][0]["presets"] == {"0.2": "PLA B 0.2", "default": "PLA B 0.2"}
     assert '"0.2"' in page.state()["status"]
+
+
+def test_capture_on_a_small_nozzle_finds_the_base_preset(plugin):
+    module, page, host = plugin
+    host.machine = "Bambu Lab A1 0.2 nozzle"
+    host.slots = ["PLA A 0.2", "Generic PLA"]
+    host.colors = ["#FFFFFF", "#000000"]
+    page.on_message({"cmd": "capture"})
+    slots = page.state()["std"]["slots"]
+    assert slots[0]["presets"] == {"default": "PLA A", "0.2": "PLA A 0.2"}
+    assert slots[1]["presets"] == {"default": "Generic PLA"}
+
+
+def test_variants_fill_when_a_printer_is_added(plugin):
+    module, page, host = plugin
+    host.slots = ["PLA A", "PETG C", "Generic PLA"]
+    page.on_message({"cmd": "capture"})
+    page.on_message({"cmd": "save_settings", "settings": {"printers": {"Bambu Lab A1 0.4 nozzle": "0.4",
+                                                                       "Bambu Lab A1 0.2 nozzle": "0.2"}}})
+    state = page.state()
+    assert [s["presets"].get("0.2") for s in state["std"]["slots"]] == ["PLA A 0.2", "PETG C 0.2", None]
+    assert state["slots_changed"] is True
 
 
 def test_save_rejects_empty_list(plugin):
@@ -360,7 +383,7 @@ def test_settings_keep_the_list_and_fill_nozzles(plugin):
     page.std = module.clean_standard({"slots": [{"presets": {"default": "PLA A"}}]})
     page.on_message({"cmd": "save_settings", "settings": {"printers": {"Bambu Lab A1 0.2 nozzle": ""}, "auto_new_project": True}})
     std = page.state()["std"]
-    assert std["slots"][0]["presets"] == {"default": "PLA A"}
+    assert std["slots"][0]["presets"] == {"default": "PLA A", "0.2": "PLA A 0.2"}  # the new 0.2 column is filled
     assert std["printers"] == {"Bambu Lab A1 0.2 nozzle": "0.2"} and std["auto_new_project"] is True
 
 

@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [3.0.3] - 2026-11-07
+### Added
+- **Nozzle columns are filled from preset names:**
+  - *Use current list as standard*, Spoolman sync and adding a printer fill an empty nozzle column when a matching preset exists, case-insensitive: "Multfila PLA 0.2" for "MULTFILA PLA", or "Generic PLA @BBL A1 0.2 nozzle" for "Generic PLA @BBL A1". Columns you already filled are never changed.
+  - Capturing on a 0.2 printer finds the base preset for the default column ("Multfila PLA 0.2" → default "MULTFILA PLA").
+
+### Changed
+- An empty nozzle cell shows, in grey, the default preset it falls back to, with a tooltip that explains it.
+
 ## [3.0.2] - 2026-11-07
 ### Fixed
 - **Settings on a fresh install:** with an empty list, changing the language or the Spoolman URL did nothing, and *Sync with Spoolman* cleared the URL and said it was not set. The settings were saved through *Save standard*, which refuses an empty list. They now save on their own, and syncing works with an empty list, which is a good way to build the list from Spoolman.
