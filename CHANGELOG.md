@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - 2026-11-07
+### Added
+- Plugin icon: a 20 px tab icon in OrcaSlicer's style (embedded in the plugin) and the brand icon `assets/icon.svg` / `assets/icon-512.png` for the README and the Orca Cloud listing.
+
 ## [2.0.0] - 2026-11-07
 First public release, as **FilamentStandard**.
 

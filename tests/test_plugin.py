@@ -232,3 +232,22 @@ def test_new_project_event(plugin):
     page.on_lifecycle_event("NewProject", None)
     page.wait()
     assert host.commits == [(1, "PLA A"), (2, "PLA B")]
+
+
+def test_tab_icon(plugin):
+    module, page, host = plugin
+    path = page.get_icon()
+    assert path == os.path.join(host.storage_dir, module.ICON_FILE)
+    with open(path, encoding="utf-8") as stream:
+        assert stream.read() == module.TAB_ICON_SVG
+    with open(path, "w", encoding="utf-8") as stream:
+        stream.write("old")
+    assert open(page.get_icon(), encoding="utf-8").read() == module.TAB_ICON_SVG  # refreshed
+
+
+def test_embedded_icon_matches_asset(plugin):
+    module, page, host = plugin
+    asset = os.path.join(os.path.dirname(module.__file__), "assets", "tab-icon.svg")
+    with open(asset, encoding="utf-8") as stream:
+        assert stream.read().strip() == module.TAB_ICON_SVG
+    assert module.TAB_ICON_SVG.startswith("<svg") and 'width="20"' in module.TAB_ICON_SVG

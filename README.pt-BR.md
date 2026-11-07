@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.svg" width="160" alt="FilamentStandard"></p>
+
 # FilamentStandard
 
 **Mantenha uma lista padrão de filamentos para as suas impressoras no OrcaSlicer: mesma ordem, mesmas cores e o perfil certo para cada bico. Restaure a lista depois de abrir projetos de outras pessoas e sincronize carretéis e preços com o [Spoolman](https://github.com/Donkie/Spoolman).**

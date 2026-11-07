@@ -7,7 +7,7 @@
 # name = "FilamentStandard"
 # description = "Keep a standard filament list (order, per-nozzle presets and colours) for your printers, restore it after opening projects, and sync spools and prices from Spoolman. English / Português."
 # author = "Jefferson J. Raimon"
-# version = "2.0.0"
+# version = "2.1.0"
 # ///
 """FilamentStandard - an OrcaSlicer plugin.
 
@@ -57,7 +57,7 @@ try:
 except ImportError:  # tests and the stand-alone helper
     orca = None
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 STD_FILE = "standard.json"
 JOB_FILE = "job.json"
 LOG_FILE = "apply.log"
@@ -66,7 +66,11 @@ DEFAULT_VARIANT = "default"
 # OrcaSlicer 2.5 writes for the Bambu Lab A1; recalculating in the GUI refines it per printer.
 FLUSH_OFFSET = 92
 FLUSH_MAX = 900
-LEGACY_DIRS = ("filamentos_padrao",)  # storage folders of the pre-2.0 Portuguese-only plugin
+LEGACY_DIRS = ("filamentos_padrao",)
+ICON_FILE = "tab-icon.svg"
+# 20 px tab icon in OrcaSlicer's style (white strokes on the dark tab bar); same as assets/tab-icon.svg
+TAB_ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><g fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round"><circle cx="4" cy="4.5" r="2.5"/><circle cx="4" cy="10" r="2.5" fill="#fff"/><circle cx="4" cy="15.5" r="2.5"/><path d="M8.5 4.5h9M8.5 10h9M8.5 15.5h5.5"/><path d="M16 13.5l2 2-2 2"/></g></svg>'
+  # storage folders of the pre-2.0 Portuguese-only plugin
 
 # ---------------------------------------------------------------- translations
 STRINGS = {
@@ -847,6 +851,22 @@ if orca is not None:
 
         def get_ui(self):
             return PAGE
+
+        def get_icon(self):
+            """OrcaSlicer wants a file: write the embedded SVG next to the plugin data when missing or outdated."""
+            try:
+                path = self._storage(ICON_FILE)
+                current = None
+                if os.path.isfile(path):
+                    with open(path, encoding="utf-8") as stream:
+                        current = stream.read()
+                if current != TAB_ICON_SVG:
+                    with open(path, "w", encoding="utf-8") as stream:
+                        stream.write(TAB_ICON_SVG)
+                return path
+            except Exception:
+                traceback.print_exc()
+                return ""
 
         def _storage(self, name):
             folder = str(orca.host.plugin.storage())

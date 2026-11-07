@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.svg" width="160" alt="FilamentStandard"></p>
+
 # FilamentStandard
 
 **Keep one standard filament list for your printers in OrcaSlicer: same order, same colours and the right preset for each nozzle. Restore the list after opening someone else's project, and sync spools and prices from [Spoolman](https://github.com/Donkie/Spoolman).**
