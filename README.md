@@ -39,7 +39,7 @@ The OrcaSlicer 2.5 plugin API can assign a preset to an **existing** slot (`orca
 
 ## Install
 
-1. Download [`filament_standard.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest), or subscribe to **FilamentStandard** on Orca Cloud once it's listed.
+1. Download [`filament_standard_any.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard_any.py), or subscribe to **FilamentStandard** on Orca Cloud once it's listed.
 2. In OrcaSlicer open **Plugins** → *More plugin install options* → **Install local plugin** and pick the file.
 3. Accept the permission prompts:
    - **threads**: for the live restore;

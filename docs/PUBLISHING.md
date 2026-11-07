@@ -1,30 +1,73 @@
 # Publishing / Publicação
 
-## GitHub
-1. Push the repository to `https://github.com/jeffersonraimon/FilamentStandard`.
-2. Tag a release: `git tag v2.0.0 && git push origin v2.0.0`.
-3. The CI workflow checks that the tag matches `VERSION` and attaches `filament_standard.py` to the release.
-4. Users install the downloaded file with **Plugins → Install local plugin**.
+## File name
 
-## Orca Cloud
-OrcaSlicer 2.5 lets users subscribe to plugins published on Orca Cloud (<https://cloud.orcaslicer.com>). Subscribed plugins are installed under `orca_plugins/_subscribed/<user>/<plugin-id>/` and update when the author publishes a new version. At the time of writing there is no public developer guide for submitting plugins, so check the Orca Cloud site and the OrcaSlicer wiki ("Plugin development guide", linked from the 2.5.0 release notes) for the current flow.
+Orca Cloud requires the plugin file name to end with a **target suffix** before `.py` or `.whl`. FilamentStandard is pure Python and runs everywhere, so it is published as **`filament_standard_any.py`**.
 
-What Orca Cloud reads from the plugin file:
-- The PEP 723 header with `[tool.orcaslicer.plugin]`: `id`, `name`, `description`, `author` and `version`. Keep `version` in sync with `VERSION`; it is what triggers the update for subscribers.
-- `dependencies = []`: keep it empty.
+The accepted suffixes are:
 
-Checklist before uploading a new version:
-- [ ] `python -m pytest` passes
-- [ ] the version is bumped in both places
-- [ ] the plugin was tested once in OrcaSlicer: live restore, full restore and Spoolman sync
-- [ ] the GitHub release exists, so the cloud listing can link to the source
+| Target | Suffixes |
+|---|---|
+| Every OS and architecture | `any` |
+| Windows | `win`, `win_x86_64`, `win_arm64` |
+| macOS | `macosx`, `macosx_x86_64`, `macosx_arm64`, `macosx_universal` |
+| Linux | `linux`, `linux_x86_64`, `linux_arm64` |
+
+The source file in the repository stays `filament_standard.py`. `scripts/build_release.py` creates both names in `dist/`.
+
+## Releasing a new version
+
+1. Bump `VERSION` and the `# version =` header in `filament_standard.py`.
+2. Add a `## [X.Y.Z]` section to `CHANGELOG.md`.
+3. Commit, then tag and push:
+
+   ```bash
+   git tag -a vX.Y.Z -m "FilamentStandard X.Y.Z"
+   git push origin vX.Y.Z
+   ```
+
+4. CI (`.github/workflows/ci.yml`) then runs on its own:
+   - it runs the tests on Windows, macOS and Linux;
+   - it creates the GitHub release, with the CHANGELOG section as notes and both files attached;
+   - **if `ORCACLOUD_PUBLISH` is `true`**, it uploads `filament_standard_any.py` to Orca Cloud as version `X.Y.Z`, using the same notes as the changelog.
+
+Orca Cloud rejects a version that is not greater than the current one.
+
+## Orca Cloud: one-time setup
+
+1. **Create the plugin.** At <https://cloud.orcaslicer.com>, go to *Shared Plugins* and create a plugin:
+   - upload `filament_standard_any.py`, from the latest GitHub release or from `dist/` after `python scripts/build_release.py vX.Y.Z`;
+   - set the version to the current one, the *Type* (Pages), the minimum OrcaSlicer version (2.5.0) and a description;
+   - optionally add the image `assets/icon-512.png` (PNG, under 2 MB).
+2. **Connect the repository.** In *Edit plugin* → *GitHub publishing*, enter `jeffersonraimon/FilamentStandard` and click **Connect**. This grants Orca Cloud no access to the repository; it only lets this repository's workflows publish versions of this plugin.
+3. **Turn on publishing from CI:**
+
+   ```bash
+   gh variable set ORCACLOUD_PUBLISH --body true --repo jeffersonraimon/FilamentStandard
+   ```
+
+**Notes**
+- **Authentication:** it uses a short-lived GitHub OIDC token (`id-token: write`), so no secrets are stored.
+- **Where the step lives:** the upload is a step of the release job, not a separate `publish-orcacloud.yml` workflow. A release created with `GITHUB_TOKEN` does not trigger other `release: published` workflows.
+- **Errors:**
+  - `401`: the repository is not connected to exactly one of your plugins.
+  - version error: the tag is not greater than the version already on Orca Cloud.
+- **Re-running:** re-running a successful release is safe; Orca Cloud rejects the duplicate without side effects.
 
 ---
 
-### Português (resumo)
-- **GitHub:** crie a tag `vX.Y.Z` e faça push dela. O CI confere a versão e anexa o `filament_standard.py` à release.
-- **Orca Cloud:**
-  - entre em <https://cloud.orcaslicer.com> com a sua conta e envie o `filament_standard.py`;
-  - o cabeçalho `[tool.orcaslicer.plugin]` define nome, descrição, autor e versão;
-  - para atualizar quem já assinou, aumente a versão e envie o arquivo de novo;
-  - ainda não há um guia público para desenvolvedores, então confira o fluxo atual no site.
+## Português
+
+**Nome do arquivo**
+- O Orca Cloud exige um sufixo de plataforma antes de `.py` ou `.whl`. Como o plugin é Python puro, ele é publicado como **`filament_standard_any.py`** (`any` = qualquer sistema e arquitetura).
+- No repositório, o arquivo continua `filament_standard.py`.
+
+**Nova versão**
+1. Atualize o `VERSION`, o cabeçalho `# version =` e o `CHANGELOG.md`.
+2. Crie a tag `vX.Y.Z` e faça push dela.
+3. O CI testa e cria a release no GitHub. Com a variável `ORCACLOUD_PUBLISH=true`, ele também envia a versão ao Orca Cloud.
+
+**Primeira vez no Orca Cloud**
+1. Em *Shared Plugins*, crie o plugin enviando o `filament_standard_any.py`. A imagem pode ser o `assets/icon-512.png`.
+2. Em *Edit plugin* → *GitHub publishing*, conecte o repositório `jeffersonraimon/FilamentStandard`.
+3. Rode `gh variable set ORCACLOUD_PUBLISH --body true`.

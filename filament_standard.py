@@ -7,7 +7,7 @@
 # name = "FilamentStandard"
 # description = "Keep a standard filament list (order, per-nozzle presets and colours) for your printers, restore it after opening projects, and sync spools and prices from Spoolman. English / Português."
 # author = "Jefferson J. Raimon"
-# version = "2.1.0"
+# version = "2.1.1"
 # ///
 """FilamentStandard - an OrcaSlicer plugin.
 
@@ -57,7 +57,7 @@ try:
 except ImportError:  # tests and the stand-alone helper
     orca = None
 
-VERSION = "2.1.0"
+VERSION = "2.1.1"
 STD_FILE = "standard.json"
 JOB_FILE = "job.json"
 LOG_FILE = "apply.log"
@@ -822,6 +822,35 @@ def storage_from(path):
     return ""
 
 
+def find_previous(storage_dir):
+    """Standard left by another installation of this plugin, for a first run.
+
+    Looks under the plugin_data root (local and Orca Cloud installs use different folders) for
+    the 1.x "Filamentos Padrão" file and for other FilamentStandard installs (e.g. a local copy
+    before subscribing on Orca Cloud). Returns ("legacy" | "current", data) or ("", None).
+    """
+    here = os.path.normcase(os.path.abspath(storage_dir))
+    parts = here.split(os.sep)
+    root = os.sep.join(parts[:len(parts) - parts[::-1].index("plugin_data")]) if "plugin_data" in parts         else os.path.dirname(here)
+    found = []
+    for folder, dirs, files in os.walk(root):
+        if folder.count(os.sep) - root.count(os.sep) >= 4:
+            dirs[:] = []
+        if os.path.normcase(os.path.abspath(folder)) == here:
+            continue
+        name = os.path.basename(folder)
+        if name in LEGACY_DIRS and "padrao.json" in files:
+            found.append(("legacy", os.path.join(folder, "padrao.json")))
+        elif STD_FILE in files:
+            found.append(("current", os.path.join(folder, STD_FILE)))
+    found.sort(key=lambda item: (item[0] == "current", os.path.getmtime(item[1])), reverse=True)
+    for kind, path in found:
+        data = read_json(path)
+        if isinstance(data, dict) and data.get("slots"):
+            return kind, data
+    return "", None
+
+
 def as_list(value):
     if value is None:
         return []
@@ -906,21 +935,15 @@ if orca is not None:
                 self.std = clean_standard(data)
             else:
                 self.std = empty_standard()
-                legacy = self._find_legacy()
-                if legacy:
-                    self.std = migrate_legacy(legacy, self._printer_names())
+                kind, previous = find_previous(str(orca.host.plugin.storage()))
+                if previous:
+                    self.std = (migrate_legacy(previous, self._printer_names()) if kind == "legacy"
+                                else clean_standard(previous))
                     self._save()
                     self.status = self._t("migrated", n=len(self.std["slots"]))
             self.pending_job = os.path.exists(self._storage(JOB_FILE))
             return self.std
 
-        def _find_legacy(self):
-            here = str(orca.host.plugin.storage())
-            for name in LEGACY_DIRS:
-                data = read_json(os.path.join(os.path.dirname(here), name, "padrao.json"))
-                if isinstance(data, dict) and data.get("slots"):
-                    return data
-            return None
 
         def _save(self):
             write_json_atomic(self._storage(STD_FILE), self.std)

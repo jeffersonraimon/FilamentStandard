@@ -39,7 +39,7 @@ A API do OrcaSlicer 2.5 consegue trocar o perfil de um slot **que já existe** (
 
 ## Instalação
 
-1. Baixe o [`filament_standard.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest), ou assine o **FilamentStandard** no Orca Cloud quando ele estiver publicado.
+1. Baixe o [`filament_standard_any.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard_any.py), ou assine o **FilamentStandard** no Orca Cloud quando ele estiver publicado.
 2. No OrcaSlicer, abra **Plugins** → *More plugin install options* → **Install local plugin** e escolha o arquivo.
 3. Aceite os pedidos de permissão:
    - **threads**: para a restauração ao vivo;

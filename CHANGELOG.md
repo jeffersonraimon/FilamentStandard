@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.1.1] - 2026-11-07
+### Changed
+- Release file renamed to `filament_standard_any.py`: Orca Cloud requires a target suffix (`_any` = every OS and architecture). The plain `filament_standard.py` is still attached to GitHub releases.
+- Releases publish to Orca Cloud from CI (GitHub OIDC, no secrets) once the repository is connected to the plugin.
+- The first run reuses the standard of any other install of the plugin: a local install before subscribing on Orca Cloud, or the 1.x "Filamentos Padrão". Orca Cloud installs keep their data in a different folder.
+
 ## [2.1.0] - 2026-11-07
 ### Added
 - Plugin icon: a 20 px tab icon in OrcaSlicer's style (embedded in the plugin) and the brand icon `assets/icon.svg` / `assets/icon-512.png` for the README and the Orca Cloud listing.

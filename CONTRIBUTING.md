@@ -23,5 +23,5 @@ python -m ruff check .
 ## Releasing
 1. Bump `VERSION` and the `# version =` header line. The test suite checks that they match.
 2. Add the changes to `CHANGELOG.md`.
-3. Tag `vX.Y.Z` and push the tag. CI attaches `filament_standard.py` to the GitHub release.
-4. Upload the same file to Orca Cloud, as described in [docs/PUBLISHING.md](docs/PUBLISHING.md).
+3. Tag `vX.Y.Z` and push the tag. CI creates the GitHub release with `filament_standard_any.py` and, once Orca Cloud publishing is set up, uploads that file to Orca Cloud.
+4. See [docs/PUBLISHING.md](docs/PUBLISHING.md) for the Orca Cloud setup.

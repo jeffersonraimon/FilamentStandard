@@ -251,3 +251,31 @@ def test_embedded_icon_matches_asset(plugin):
     with open(asset, encoding="utf-8") as stream:
         assert stream.read().strip() == module.TAB_ICON_SVG
     assert module.TAB_ICON_SVG.startswith("<svg") and 'width="20"' in module.TAB_ICON_SVG
+
+
+def test_previous_install_is_reused(plugin, tmp_path):
+    module, page, host = plugin
+    # a local FilamentStandard install, then the plugin is subscribed on Orca Cloud
+    local = os.path.join(os.path.dirname(host.storage_dir), "filament_standard_any")
+    os.makedirs(local)
+    with open(os.path.join(local, module.STD_FILE), "w", encoding="utf-8") as stream:
+        json.dump({"slots": [{"presets": {"default": "PLA B"}, "color": "#000000"}]}, stream)
+    page.on_message({"cmd": "ready"})
+    assert page.state()["std"]["slots"][0]["presets"] == {"default": "PLA B"}
+
+
+def test_find_previous_from_cloud_storage(fs, tmp_path):
+    data_root = tmp_path / "orca_plugins" / "plugin_data"
+    cloud = data_root / "_subscribed" / "user1" / "uuid-key"
+    cloud.mkdir(parents=True)
+    legacy = data_root / "filamentos_padrao"
+    legacy.mkdir()
+    (legacy / "padrao.json").write_text('{"slots": [{"p04": "X"}]}', encoding="utf-8")
+    assert fs.find_previous(str(cloud)) == ("legacy", {"slots": [{"p04": "X"}]})
+    local = data_root / "filament_standard"
+    local.mkdir()
+    (local / fs.STD_FILE).write_text('{"slots": [{"presets": {"default": "Y"}}]}', encoding="utf-8")
+    assert fs.find_previous(str(cloud))[0] == "current"  # a FilamentStandard install wins over 1.x
+    (cloud / fs.STD_FILE).write_text('{"slots": [{"presets": {"default": "Z"}}]}', encoding="utf-8")
+    assert fs.find_previous(str(cloud))[1]["slots"][0]["presets"]["default"] == "Y"  # never itself
+    assert fs.find_previous(str(tmp_path / "nothing" / "here")) == ("", None)
