@@ -51,6 +51,12 @@ Both editions are built from the same source by `scripts/build_release.py`.
 
 The OrcaSlicer 2.5 plugin API can assign a preset to an **existing** slot (`orca.host.preset.filament.begin_update`). It can't add or remove slots, and it can't set a slot's colour. That is why the **full restore** exists: it edits `OrcaSlicer.conf` while OrcaSlicer is closed, the same way OrcaSlicer itself writes it, MD5 checksum included.
 
+**Colours and slot count in the cloud edition.**
+
+- *Restore presets now* fixes the preset of each slot, but not its colour or the number of slots. The cloud edition can't edit `OrcaSlicer.conf`, so it has no full restore.
+- The *Current project* column shows the colour each slot has, so you can adjust it in the sidebar.
+- Native support is requested in [OrcaSlicer#17357](https://github.com/OrcaSlicer/OrcaSlicer/issues/17357): plugin API calls to set a slot's colour and the slot count. If you'd like this too, add a 👍 there. Once it exists, the cloud edition will restore colours and slot count as well.
+
 ## Privacy and safety
 
 - **No network access unless you set it up.** The plugin only talks to the Spoolman URL you type in Settings, after you confirm it, and only when you press *Sync with Spoolman*. That is a read-only `GET /api/v1/spool`; nothing is sent anywhere.

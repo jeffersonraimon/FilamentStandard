@@ -51,6 +51,12 @@ As duas edições são geradas do mesmo código pelo `scripts/build_release.py`.
 
 A API do OrcaSlicer 2.5 consegue trocar o perfil de um slot **que já existe** (`orca.host.preset.filament.begin_update`). Ela não cria nem remove slots e não muda a cor de um slot. Por isso existe a **restauração completa**: ela edita o `OrcaSlicer.conf` com o OrcaSlicer fechado, do mesmo jeito que o próprio OrcaSlicer grava o arquivo, com checksum MD5.
 
+**Cores e quantidade de slots na edição Cloud.**
+
+- *Restaurar perfis agora* corrige o perfil de cada slot, mas não a cor nem a quantidade de slots. A edição Cloud não pode editar o `OrcaSlicer.conf`, então não tem a restauração completa.
+- A coluna *Projeto atual* mostra a cor de cada slot, para você ajustar na barra lateral.
+- O suporte nativo foi pedido em [OrcaSlicer#17357](https://github.com/OrcaSlicer/OrcaSlicer/issues/17357): funções da API de plugins para definir a cor de um slot e a quantidade de slots. Se você também quer isso, deixe um 👍 lá. Quando existir, a edição Cloud vai restaurar cores e quantidade também.
+
 ## Privacidade e segurança
 
 - **Sem acesso à rede, a não ser que você configure.** O plugin só fala com a URL do Spoolman que você digitar em Configuração, depois de você confirmar, e só quando você clica em *Sincronizar com o Spoolman*. É uma leitura (`GET /api/v1/spool`); nada é enviado para lugar nenhum.
