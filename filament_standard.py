@@ -7,44 +7,54 @@
 # name = "FilamentStandard"
 # description = "Keep a standard filament list (order, per-nozzle presets and colours) for your printers, restore it after opening projects, and sync spools and prices from Spoolman. English / Português."
 # author = "Jefferson J. Raimon"
-# version = "2.2.0"
+# version = "3.0.0"
 # ///
 """FilamentStandard - an OrcaSlicer plugin.
 
-OrcaSlicer keeps one filament list per printer profile (``orca_presets`` in
-``OrcaSlicer.conf``) and overwrites it whenever a .3mf project is opened, so the
-order and colours of your filaments drift from printer to printer and nozzle to
-nozzle. FilamentStandard keeps one *standard* list - slot -> filament preset per
+OrcaSlicer keeps one filament list per printer profile and replaces it whenever a
+.3mf project is opened, so the order and colours of your filaments drift from
+printer to printer and nozzle to nozzle. FilamentStandard keeps one *standard* list - slot -> filament preset per
 nozzle diameter, colour, Spoolman spool - and offers:
 
 * Capture the current project's list as the standard.
 * Restore presets now: re-assign the presets of the existing slots live through
   ``orca.host.preset.filament.begin_update(slot, name)``. The host API cannot
   add slots or change project colours.
-* Full restore on close: a detached helper waits for OrcaSlicer to exit, backs
-  everything up, writes the list (presets, colours, flush matrix) into every
-  selected printer profile, writes the prices into the filament presets and
-  optionally reopens OrcaSlicer.
-* Spoolman sync (optional): new / removed spools, colours and the average price
-  per preset, previewed before anything changes.
+* Apply prices: write each preset's price per kg as an unsaved edit, through the
+  same API.
+* Spoolman sync (optional, asks before the first connection): new / removed
+  spools, colours and the average price per preset, previewed before anything
+  changes. Read-only: the plugin only GETs the spool list.
 * Optional (off by default): restore the presets whenever a New project starts.
 
-The same file runs outside OrcaSlicer:
-``python filament_standard.py --apply <job.json>`` (used by the helper) and
-``python filament_standard.py --restore <OrcaSlicer data dir> <standard.json>``
-(manual restore with OrcaSlicer closed).
+Two editions are built from this file. The Orca Cloud edition uses only the plugin
+API and the plugin's own storage folder.
+>>> full-edition
+The full edition (GitHub) adds an opt-in full restore that edits OrcaSlicer.conf
+with OrcaSlicer closed (slot count and colours, which the API cannot change), run
+by a detached helper: ``python filament_standard.py --apply <job.json>``, plus
+``--restore <data dir> <standard.json>`` and ``--undo <data dir> <backup>``.
+<<< full-edition
 """
 from __future__ import annotations
 
 import colorsys
+
+# >>> full-edition
 import datetime
 import hashlib
+
+# <<< full-edition
 import json
 import math
 import os
 import re
+
+# >>> full-edition
 import shutil
 import subprocess
+
+# <<< full-edition
 import sys
 import threading
 import time
@@ -57,7 +67,9 @@ try:
 except ImportError:  # tests and the stand-alone helper
     orca = None
 
-VERSION = "2.2.0"
+VERSION = "3.0.0"
+# "full" (GitHub) or "cloud" (Orca Cloud): scripts/build_release.py removes the full-only blocks
+EDITION = "full"
 STD_FILE = "standard.json"
 JOB_FILE = "job.json"
 LOG_FILE = "apply.log"
@@ -80,14 +92,29 @@ STRINGS = {
         "actions": "Actions",
         "restore_live": "Restore presets now",
         "restore_live_tip": "Re-assigns the presets of the existing slots (cannot change colours or the number of slots)",
+        # >>> full-edition
         "restore_full": "Full restore on close",
+        # <<< full-edition
+        # >>> full-edition
         "restore_full_tip": "When OrcaSlicer closes, writes the list, colours and prices into every selected printer",
+        # <<< full-edition
+        # >>> full-edition
         "relaunch": "reopen OrcaSlicer afterwards",
+        # <<< full-edition
+        # >>> full-edition
         "cancel_full": "Cancel scheduled restore",
+        # <<< full-edition
         "capture": "Use current list as standard",
         "capture_tip": "Replaces the standard with the filaments and colours of the current project",
         "capture_confirm": "Replace the standard list with the filaments and colours of the current project?",
         "sync": "Sync with Spoolman",
+        "apply_prices": "Apply prices to presets",
+        "apply_prices_tip": "Writes each preset's price per kg (filament cost) as an unsaved edit; save the presets in OrcaSlicer to keep it",
+        "msg_prices_running": "Applying the price of {n} preset(s)...",
+        "msg_prices_done": "Price applied to {n} preset(s) as unsaved edits. Save the filament presets in OrcaSlicer to keep them.",
+        "msg_prices_none": "No preset in the current project has a different price.",
+        "spoolman_confirm": "Connect to Spoolman at {url}? The plugin only reads the spool list (filament, colour, price); nothing is sent.",
+        "err_spoolman_consent": "Allow the connection to Spoolman first (press Sync with Spoolman and confirm).",
         "auto": "restore presets on New project",
         "standard": "Standard list",
         "col_color": "Colour",
@@ -98,7 +125,7 @@ STRINGS = {
         "add_slot": "Add slot",
         "save": "Save standard",
         "printers": "Printer profiles",
-        "printers_help": "The full restore writes the list into these profiles. Presets are chosen by nozzle: the {nozzle} mm column if filled, otherwise the default column.",
+        "printers_help": "Printer profiles that use this standard. Presets are chosen by nozzle: the {nozzle} mm column if filled, otherwise the default column.",
         "add_current_printer": "Add current printer",
         "filter": "filter",
         "nozzle": "nozzle",
@@ -127,21 +154,39 @@ STRINGS = {
         "ok": "ok",
         "first_run": "No standard yet. Set up the list below or use \"Use current list as standard\".",
         "migrated": "Imported the standard from a previous install of the plugin ({n} slots). The Spoolman URL and the full restore were not carried over: set them again in Settings if you use them.",
+        # >>> full-edition
         "full_section": "Full restore",
+        # <<< full-edition
+        # >>> full-edition
         "allow_conf_edit": "allow the full restore to edit OrcaSlicer.conf",
+        # <<< full-edition
+        # >>> full-edition
         "allow_conf_edit_help": "The plugin API cannot add slots or change colours, so the full restore edits OrcaSlicer.conf with OrcaSlicer closed. Only the filament lists of the selected printer profiles change; other settings in that file, such as printer access codes, are left as they are and are not copied. The backup keeps only the lists that change (undo: python filament_standard.py --undo <data dir> <backup folder>).",
+        # <<< full-edition
+        # >>> full-edition
         "full_confirm": "Schedule the full restore? When OrcaSlicer closes, the filament lists of the selected printer profiles in OrcaSlicer.conf will be replaced.",
+        # <<< full-edition
+        # >>> full-edition
         "err_conf_edit_off": "The full restore is off. Turn it on under Full restore.",
+        # <<< full-edition
         "msg_saved": "Standard saved ({n} slots).",
         "msg_captured": "Current list ({n} slots, {machine}) saved as standard in the \"{column}\" column. Check the other columns.",
         "msg_live_none": "The {n} slots already use the standard presets.",
         "msg_live_running": "Updating {n} slot(s)...",
         "msg_live_done": "{n} slot(s) updated.",
         "msg_count_differs": "The project has {cur} slots and the standard {std}: the number of slots and the colours only change with the full restore.",
+        # >>> full-edition
         "msg_full_scheduled": "Restore scheduled. Close OrcaSlicer: the list will be written to {n} printer profile(s) and OrcaSlicer will {after}.",
+        # <<< full-edition
+        # >>> full-edition
         "msg_after_reopen": "reopen by itself",
+        # <<< full-edition
+        # >>> full-edition
         "msg_after_closed": "stay closed",
+        # <<< full-edition
+        # >>> full-edition
         "msg_full_cancelled": "Scheduled restore cancelled (the helper exits without changing anything).",
+        # <<< full-edition
         "msg_sync": "Spoolman: {spools} active spools. {added} new, {removed} removed, {recolored} colour change(s), {prices} price change(s), {unmapped} without a preset.",
         "msg_sync_applied": "Standard updated from Spoolman ({n} slots). Prices reach the presets on the next full restore.",
         "msg_reset": "Everything was reset.",
@@ -149,8 +194,12 @@ STRINGS = {
         "err_busy": "A restore is already running",
         "err_empty": "The list needs at least one slot",
         "err_no_current": "Could not read the filaments of the current project",
+        # >>> full-edition
         "err_no_python": "Python was not found. The full restore needs a Python 3 interpreter on PATH (or run the --restore command with OrcaSlicer closed).",
+        # <<< full-edition
+        # >>> full-edition
         "err_no_printers": "Select at least one printer profile first",
+        # <<< full-edition
         "err_no_spoolman": "Set the Spoolman URL in Settings first",
         "err_preview_first": "Create the sync preview first",
         "err_bad_json": "Invalid JSON: {error}",
@@ -162,14 +211,29 @@ STRINGS = {
         "actions": "Ações",
         "restore_live": "Restaurar perfis agora",
         "restore_live_tip": "Troca os perfis dos slots existentes (não muda cores nem a quantidade de slots)",
+        # >>> full-edition
         "restore_full": "Restauração completa ao fechar",
+        # <<< full-edition
+        # >>> full-edition
         "restore_full_tip": "Quando o OrcaSlicer fechar, grava lista, cores e preços em todas as impressoras selecionadas",
+        # <<< full-edition
+        # >>> full-edition
         "relaunch": "reabrir o OrcaSlicer depois",
+        # <<< full-edition
+        # >>> full-edition
         "cancel_full": "Cancelar restauração agendada",
+        # <<< full-edition
         "capture": "Usar a lista atual como padrão",
         "capture_tip": "Substitui o padrão pelos filamentos e cores do projeto atual",
         "capture_confirm": "Substituir a lista padrão pelos filamentos e cores do projeto atual?",
         "sync": "Sincronizar com o Spoolman",
+        "apply_prices": "Aplicar preços aos perfis",
+        "apply_prices_tip": "Grava o preço por kg (custo do filamento) de cada perfil como edição não salva; salve os perfis no OrcaSlicer para manter",
+        "msg_prices_running": "Aplicando o preço de {n} perfil(is)...",
+        "msg_prices_done": "Preço aplicado a {n} perfil(is) como edição não salva. Salve os perfis de filamento no OrcaSlicer para manter.",
+        "msg_prices_none": "Nenhum perfil do projeto atual tem preço diferente.",
+        "spoolman_confirm": "Conectar ao Spoolman em {url}? O plugin só lê a lista de carretéis (filamento, cor, preço); nada é enviado.",
+        "err_spoolman_consent": "Permita antes a conexão com o Spoolman (clique em Sincronizar com o Spoolman e confirme).",
         "auto": "restaurar perfis ao criar Novo projeto",
         "standard": "Lista padrão",
         "col_color": "Cor",
@@ -180,7 +244,7 @@ STRINGS = {
         "add_slot": "Adicionar slot",
         "save": "Salvar padrão",
         "printers": "Perfis de impressora",
-        "printers_help": "A restauração completa grava a lista nesses perfis. O perfil de filamento é escolhido pelo bico: a coluna {nozzle} mm se preenchida, senão a coluna padrão.",
+        "printers_help": "Perfis de impressora que usam este padrão. O perfil de filamento é escolhido pelo bico: a coluna {nozzle} mm se preenchida, senão a coluna padrão.",
         "add_current_printer": "Adicionar impressora atual",
         "filter": "filtrar",
         "nozzle": "bico",
@@ -209,21 +273,39 @@ STRINGS = {
         "ok": "ok",
         "first_run": "Ainda não há padrão. Monte a lista abaixo ou use \"Usar a lista atual como padrão\".",
         "migrated": "Padrão importado de uma instalação anterior do plugin ({n} slots). A URL do Spoolman e a restauração completa não foram trazidas: configure de novo se usar.",
+        # >>> full-edition
         "full_section": "Restauração completa",
+        # <<< full-edition
+        # >>> full-edition
         "allow_conf_edit": "permitir que a restauração completa edite o OrcaSlicer.conf",
+        # <<< full-edition
+        # >>> full-edition
         "allow_conf_edit_help": "A API de plugins não cria slots nem muda cores, então a restauração completa edita o OrcaSlicer.conf com o OrcaSlicer fechado. Só mudam as listas de filamentos dos perfis de impressora escolhidos; as outras configurações do arquivo, como os códigos de acesso das impressoras, ficam como estão e não são copiadas. O backup guarda só as listas alteradas (desfazer: python filament_standard.py --undo <pasta de dados> <pasta do backup>).",
+        # <<< full-edition
+        # >>> full-edition
         "full_confirm": "Agendar a restauração completa? Quando o OrcaSlicer fechar, as listas de filamentos dos perfis de impressora escolhidos no OrcaSlicer.conf serão substituídas.",
+        # <<< full-edition
+        # >>> full-edition
         "err_conf_edit_off": "A restauração completa está desligada. Ligue em Restauração completa.",
+        # <<< full-edition
         "msg_saved": "Padrão salvo ({n} slots).",
         "msg_captured": "Lista atual ({n} slots, {machine}) salva como padrão na coluna \"{column}\". Confira as outras colunas.",
         "msg_live_none": "Os {n} slots já estão com os perfis do padrão.",
         "msg_live_running": "Ajustando {n} slot(s)...",
         "msg_live_done": "{n} slot(s) ajustado(s).",
         "msg_count_differs": "O projeto tem {cur} slots e o padrão {std}: a quantidade de slots e as cores só mudam com a restauração completa.",
+        # >>> full-edition
         "msg_full_scheduled": "Restauração agendada. Feche o OrcaSlicer: a lista será gravada em {n} perfil(is) de impressora e o OrcaSlicer {after}.",
+        # <<< full-edition
+        # >>> full-edition
         "msg_after_reopen": "reabrirá sozinho",
+        # <<< full-edition
+        # >>> full-edition
         "msg_after_closed": "ficará fechado",
+        # <<< full-edition
+        # >>> full-edition
         "msg_full_cancelled": "Restauração agendada cancelada (o auxiliar encerra sem alterar nada).",
+        # <<< full-edition
         "msg_sync": "Spoolman: {spools} carretéis ativos. {added} novo(s), {removed} removido(s), {recolored} cor(es) alterada(s), {prices} preço(s) alterado(s), {unmapped} sem perfil.",
         "msg_sync_applied": "Padrão atualizado pelo Spoolman ({n} slots). Os preços vão para os perfis na próxima restauração completa.",
         "msg_reset": "Tudo foi apagado.",
@@ -231,8 +313,12 @@ STRINGS = {
         "err_busy": "Já existe uma restauração em andamento",
         "err_empty": "A lista precisa de pelo menos um slot",
         "err_no_current": "Não consegui ler os filamentos do projeto atual",
+        # >>> full-edition
         "err_no_python": "Python não encontrado. A restauração completa precisa de um Python 3 no PATH (ou rode o comando --restore com o OrcaSlicer fechado).",
+        # <<< full-edition
+        # >>> full-edition
         "err_no_printers": "Selecione pelo menos um perfil de impressora antes",
+        # <<< full-edition
         "err_no_spoolman": "Configure a URL do Spoolman antes",
         "err_preview_first": "Gere a prévia da sincronização primeiro",
         "err_bad_json": "JSON inválido: {error}",
@@ -261,9 +347,14 @@ def empty_standard():
         "spool_map": {},  # "Vendor|Filament name" -> {"default": name, "0.2": name}
         "prices": {},  # filament preset name -> price per kg
         "spoolman_url": "",
+        "spoolman_consent": "",  # origin the user allowed; the plugin connects only to it
         "auto_new_project": False,
+        # >>> full-edition
         "relaunch": True,
+        # <<< full-edition
+        # >>> full-edition
         "allow_conf_edit": False,  # the full restore edits OrcaSlicer.conf: explicit opt-in
+        # <<< full-edition
         "language": "auto",
         "sort_on_sync": True,
     }
@@ -321,7 +412,7 @@ def clean_standard(data):
     if not isinstance(data, dict):
         raise ValueError("standard must be an object")
     std = empty_standard()
-    for key in ("spoolman_url", "language"):
+    for key in ("spoolman_url", "spoolman_consent", "language"):
         if isinstance(data.get(key), str):
             std[key] = data[key].strip()
     for key in ("auto_new_project", "relaunch", "sort_on_sync", "allow_conf_edit"):
@@ -361,7 +452,9 @@ def migrate_legacy(old, printer_names=()):
     data = {
         "slots": [], "spool_map": {}, "prices": old.get("prices") or {},
         "auto_new_project": old.get("auto_new_project", False),
+        # >>> full-edition
         "relaunch": old.get("relaunch", True),
+        # <<< full-edition
         "language": "pt",
     }
 
@@ -400,6 +493,7 @@ def write_json_atomic(path, value):
     os.replace(tmp, path)
 
 
+# >>> full-edition
 # ---------------------------------------------------------------- flushing volumes
 def flush_volume(src, dst):
     """OrcaSlicer's colour-based flushing volume (FlushVolCalc), without the minimum purge."""
@@ -708,6 +802,9 @@ def run_job(job_path, wait=True, poll=2.0):
     return 0
 
 
+# <<< full-edition
+
+
 # ---------------------------------------------------------------- Spoolman
 def spoolman_origin(url):
     parts = urllib.parse.urlsplit(url or "")
@@ -841,6 +938,7 @@ def plan_sync(std, spools):
 
 
 # ---------------------------------------------------------------- inside OrcaSlicer
+# >>> full-edition
 def data_dir_from(path):
     """OrcaSlicer data folder from the plugin's own location (.../<data_dir>/orca_plugins/...)."""
     path = os.path.abspath(path)
@@ -851,6 +949,9 @@ def data_dir_from(path):
         if not parent or parent == path:
             return ""
         path = parent
+
+
+# <<< full-edition
 
 
 def storage_from(path):
@@ -873,6 +974,7 @@ def storage_from(path):
     return ""
 
 
+# >>> full-edition
 OWN_DIR = re.compile(r"filament[_-]?standard", re.I)
 
 
@@ -907,8 +1009,11 @@ def find_previous(storage_dir):
     for kind, path in found:
         data = read_json(path)
         if isinstance(data, dict) and data.get("slots"):
-            return kind, dict(data, spoolman_url="", allow_conf_edit=False)
+            return kind, dict(data, spoolman_url="", spoolman_consent="", allow_conf_edit=False)
     return "", None
+
+
+# <<< full-edition
 
 
 def as_list(value):
@@ -995,12 +1100,14 @@ if orca is not None:
                 self.std = clean_standard(data)
             else:
                 self.std = empty_standard()
+                # >>> full-edition
                 kind, previous = find_previous(str(orca.host.plugin.storage()))
                 if previous:
                     self.std = (migrate_legacy(previous, self._printer_names()) if kind == "legacy"
                                 else clean_standard(previous))
                     self._save()
                     self.status = self._t("migrated", n=len(self.std["slots"]))
+                # <<< full-edition
             self.pending_job = os.path.exists(self._storage(JOB_FILE))
             return self.std
 
@@ -1069,9 +1176,12 @@ if orca is not None:
                         "save_std": self._save_std,
                         "capture": lambda d: self._capture(),
                         "restore_live": lambda d: self._restore_live(),
+                        # >>> full-edition
                         "restore_full": self._restore_full,
                         "cancel_full": lambda d: self._cancel_full(),
-                        "sync_preview": lambda d: self._sync_preview(),
+                        # <<< full-edition
+                        "sync_preview": self._sync_preview,
+                        "apply_prices": lambda d: self._apply_prices(),
                         "sync_apply": self._sync_apply,
                         "sync_discard": lambda d: setattr(self, "proposal", None),
                         "add_current_printer": lambda d: self._add_current_printer(),
@@ -1187,6 +1297,7 @@ if orca is not None:
             self.worker = threading.Thread(target=work, name="filament-standard", daemon=True)
             self.worker.start()
 
+        # >>> full-edition
         # ---- full restore on close
         def _restore_full(self, data):
             if not self.std["slots"]:
@@ -1226,10 +1337,26 @@ if orca is not None:
             self.pending_job = False
             self.status = self._t("msg_full_cancelled")
 
+        # <<< full-edition
+
         # ---- Spoolman
-        def _sync_preview(self):
-            if not spoolman_origin(self.std.get("spoolman_url")):
+        def _spoolman_allowed(self, consent=False):
+            """The plugin connects only to the Spoolman origin the user confirmed."""
+            origin = spoolman_origin(self.std.get("spoolman_url"))
+            if not origin:
                 raise RuntimeError(self._t("err_no_spoolman"))
+            if consent and self.std.get("spoolman_consent") != origin:
+                self.std["spoolman_consent"] = origin
+                self._save()
+                try:
+                    orca.request_permissions(network=[origin])
+                except Exception:
+                    pass  # older hosts: OrcaSlicer's own audit prompt still asks
+            if self.std.get("spoolman_consent") != origin:
+                raise RuntimeError(self._t("err_spoolman_consent"))
+
+        def _sync_preview(self, data=None):
+            self._spoolman_allowed(bool((data or {}).get("consent")))
             spools = fetch_spools(self.std["spoolman_url"])
             self.proposal = plan_sync(self.std, spools)
             p = self.proposal
@@ -1247,12 +1374,50 @@ if orca is not None:
                     self.std["spool_map"][key] = presets
                     mapped = True
             if mapped:  # new mappings: redo the preview with them
+                self._spoolman_allowed()
                 self.proposal = plan_sync(self.std, fetch_spools(self.std["spoolman_url"]))
             self.std["slots"] = self.proposal["slots"]
             self.std["prices"] = self.proposal["prices"]
             self._save()
             self.proposal = None
             self.status = self._t("msg_sync_applied", n=len(self.std["slots"]))
+
+        # ---- prices (through the API, as unsaved edits)
+        def _apply_prices(self):
+            if self.busy:
+                raise RuntimeError(self._t("err_busy"))
+            _, _, names, _ = self._current()
+            prices = self.std.get("prices") or {}
+            todo, seen = [], set()
+            for i, name in enumerate(names):
+                if name in prices and name not in seen:
+                    seen.add(name)
+                    todo.append((i + 1, name, "%.2f" % float(prices[name])))
+            if not todo:
+                self.status = self._t("msg_prices_none")
+                return
+            self.busy = True
+            self.status = self._t("msg_prices_running", n=len(todo))
+
+            def work():
+                ok, fails = 0, []
+                editor = orca.host.preset.filament
+                for slot, name, price in todo:
+                    try:
+                        transaction = editor.begin_update(slot)
+                        transaction.set("filament_cost", price)
+                        transaction.commit()
+                        ok += 1
+                    except Exception as exc:
+                        fails.append("%s: %s" % (name, exc))
+                with self.lock:
+                    self.busy = False
+                    self.status = self._t("msg_prices_done", n=ok)
+                    self.error = "; ".join(fails)
+                    self.post_message({"type": "refresh_request"})
+
+            self.worker = threading.Thread(target=work, name="filament-standard-prices", daemon=True)
+            self.worker.start()
 
         # ---- events
         def on_lifecycle_event(self, event, ctx):
@@ -1275,8 +1440,9 @@ if orca is not None:
         network = []
         storage = storage_from(os.path.abspath(__file__))
         if storage:
-            origin = spoolman_origin((read_json(os.path.join(storage, STD_FILE)) or {}).get("spoolman_url"))
-            if origin:
+            saved = read_json(os.path.join(storage, STD_FILE)) or {}
+            origin = spoolman_origin(saved.get("spoolman_url"))
+            if origin and saved.get("spoolman_consent") == origin:  # only a host the user confirmed
                 network.append(origin)
         try:
             orca.request_permissions(threading=True, network=network)
@@ -1325,13 +1491,16 @@ textarea{width:100%;min-height:140px;font-family:Consolas,monospace;font-size:12
 <div class="card"><h2 data-i18n="actions"></h2>
 <div class="row">
 <button id="b-live" data-i18n="restore_live" data-i18n-title="restore_live_tip"></button>
+<!-- >>> full-edition -->
 <button id="b-full" data-i18n="restore_full" data-i18n-title="restore_full_tip"></button>
 <label class="small"><input type="checkbox" id="relaunch"> <span data-i18n="relaunch"></span></label>
 <button class="sec" id="b-cancel" style="display:none" data-i18n="cancel_full"></button>
+<!-- <<< full-edition -->
 </div>
 <div class="row" style="margin-top:8px">
 <button class="sec" id="b-capture" data-i18n="capture" data-i18n-title="capture_tip"></button>
 <button class="sec" id="b-sync" data-i18n="sync"></button>
+<button class="sec" id="b-prices" data-i18n="apply_prices" data-i18n-title="apply_prices_tip"></button>
 <label class="small"><input type="checkbox" id="auto"> <span data-i18n="auto"></span></label>
 </div></div>
 
@@ -1359,10 +1528,12 @@ textarea{width:100%;min-height:140px;font-family:Consolas,monospace;font-size:12
 <div class="row" style="margin-top:8px"><button class="sec" id="b-reset" data-i18n="reset"></button><span class="mute small" id="ver"></span></div>
 </div>
 
+<!-- >>> full-edition -->
 <div class="card"><h2 data-i18n="full_section"></h2>
 <label class="small"><input type="checkbox" id="confedit"> <span data-i18n="allow_conf_edit"></span></label>
 <div class="mute small" style="margin-top:6px" data-i18n="allow_conf_edit_help"></div>
 </div>
+<!-- <<< full-edition -->
 
 <div class="card"><h2 data-i18n="json"></h2>
 <div class="row"><button class="sec" id="b-export" data-i18n="json_export"></button><button class="sec" id="b-import" data-i18n="json_import"></button></div>
@@ -1376,9 +1547,11 @@ const $=id=>document.getElementById(id);
 const esc=v=>String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const t=(k,a)=>{let s=T[k]||k;if(a)for(const x in a)s=s.split('{'+x+'}').join(a[x]);return s;};
 const send=m=>orca.postMessage(m);
+const chk=(id,d)=>$(id)?$(id).checked:d;
+const origin=u=>{try{const x=new URL(u);return /^https?:$/.test(x.protocol)?x.origin:'';}catch(e){return '';}};
 const want=(s,n)=>(s.presets&&(s.presets[n]||s.presets['default']))||'';
 function collect(){return Object.assign({},S.std,{slots:slots,printers:printers,spoolman_url:$('url').value,
-  auto_new_project:$('auto').checked,relaunch:$('relaunch').checked,allow_conf_edit:$('confedit').checked,language:$('lang').value,sort_on_sync:$('sortsync').checked});}
+  auto_new_project:$('auto').checked,relaunch:chk('relaunch',S.std.relaunch!==false),allow_conf_edit:chk('confedit',!!S.std.allow_conf_edit),language:$('lang').value,sort_on_sync:$('sortsync').checked});}
 function i18n(){document.querySelectorAll('[data-i18n]').forEach(e=>e.textContent=t(e.dataset.i18n));
   document.querySelectorAll('[data-i18n-title]').forEach(e=>e.title=t(e.dataset.i18nTitle));
   $('pfilter').placeholder=t('filter');document.documentElement.lang=S.lang==='pt'?'pt-BR':'en';}
@@ -1410,10 +1583,13 @@ function render(){
   $('printers-help').textContent=t('printers_help',{nozzle:c.nozzle||'0.2'});
   renderPrinters();
   $('url').value=S.std.spoolman_url||'';$('lang').value=S.std.language||'auto';
-  $('auto').checked=!!S.std.auto_new_project;$('confedit').checked=!!S.std.allow_conf_edit;$('relaunch').checked=S.std.relaunch!==false;$('sortsync').checked=S.std.sort_on_sync!==false;
+  $('auto').checked=!!S.std.auto_new_project;$('sortsync').checked=S.std.sort_on_sync!==false;
+  ['b-live','b-sync','b-capture','b-prices'].forEach(id=>$(id).disabled=!!S.busy);
+// >>> full-edition
+  $('confedit').checked=!!S.std.allow_conf_edit;$('relaunch').checked=S.std.relaunch!==false;
   $('b-cancel').style.display=S.pending_job?'':'none';
-  ['b-live','b-full','b-sync','b-capture'].forEach(id=>$(id).disabled=!!S.busy);
   $('b-full').disabled=!!S.busy||!S.std.allow_conf_edit;
+// <<< full-edition
   $('ver').textContent='FilamentStandard v'+S.version;
   renderSync();
 }
@@ -1464,15 +1640,22 @@ $('pfilter').oninput=renderPrinters;
 $('b-add').onclick=()=>{slots.push({presets:{'default':''},color:'#FFFFFF',spool:null});render();};
 $('b-save').onclick=()=>send({cmd:'save_std',std:collect()});
 $('b-live').onclick=()=>send({cmd:'restore_live'});
+// >>> full-edition
 $('b-full').onclick=()=>{if(confirm(t('full_confirm')))send({cmd:'restore_full',relaunch:$('relaunch').checked});};
 $('b-cancel').onclick=()=>send({cmd:'cancel_full'});
+$('confedit').onchange=()=>send({cmd:'save_std',std:collect()});
+// <<< full-edition
 $('b-capture').onclick=()=>{if(confirm(t('capture_confirm')))send({cmd:'capture'});};
-$('b-sync').onclick=()=>send({cmd:'sync_preview'});
+$('b-sync').onclick=()=>{const u=$('url').value.trim(),o=origin(u);
+  if(o&&S.std.spoolman_consent!==o){if(!confirm(t('spoolman_confirm',{url:o})))return;
+    send({cmd:'save_std',std:collect()});send({cmd:'sync_preview',consent:true});return;}
+  send({cmd:'sync_preview'});};
+$('b-prices').onclick=()=>send({cmd:'apply_prices'});
 $('b-addprinter').onclick=()=>send({cmd:'add_current_printer'});
 $('b-reset').onclick=()=>{if(confirm(t('reset_confirm')))send({cmd:'reset'});};
 $('b-export').onclick=()=>{const j=$('json');j.style.display='';j.value=JSON.stringify(collect(),null,1);};
 $('b-import').onclick=()=>{const j=$('json');if(j.style.display==='none'){j.style.display='';j.value='';j.focus();return;}send({cmd:'import_json',text:j.value});};
-['auto','lang','sortsync','confedit'].forEach(id=>$(id).onchange=()=>send({cmd:'save_std',std:collect()}));
+['auto','lang','sortsync'].forEach(id=>$(id).onchange=()=>send({cmd:'save_std',std:collect()}));
 orca.onMessage(msg=>{
   if(!msg)return;
   if(msg.type==='state'){S=msg;T=msg.i18n||{};slots=JSON.parse(JSON.stringify(msg.std.slots));printers=JSON.parse(JSON.stringify(msg.std.printers||{}));render();}
@@ -1484,6 +1667,7 @@ send({cmd:'ready'});
 
 
 def main(argv):
+    # >>> full-edition
     if len(argv) >= 3 and argv[1] == "--apply":
         return run_job(argv[2])
     if len(argv) >= 4 and argv[1] == "--restore":
@@ -1502,6 +1686,9 @@ def main(argv):
     print("usage:\n  python filament_standard.py --apply <job.json>\n"
           "  python filament_standard.py --undo <OrcaSlicer data dir> <backup folder>\n"
           "  python filament_standard.py --restore <OrcaSlicer data dir> <standard.json>")
+    return 1
+    # <<< full-edition
+    print("FilamentStandard %s (%s edition) is an OrcaSlicer plugin: install it from OrcaSlicer's plugin manager." % (VERSION, EDITION))
     return 1
 
 

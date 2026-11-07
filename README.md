@@ -19,6 +19,17 @@ OrcaSlicer keeps one filament list per printer profile, in `orca_presets` inside
 
 FilamentStandard keeps one standard list: slot → filament preset per nozzle diameter, colour and Spoolman spool. It puts that list back whenever you want.
 
+## Editions
+
+Both editions are built from the same source by `scripts/build_release.py`.
+
+| | **Cloud edition** `filament_standard_any.py` | **Full edition** `filament_standard.py` |
+|---|---|---|
+| Where | Orca Cloud | [GitHub releases](https://github.com/jeffersonraimon/FilamentStandard/releases/latest) |
+| Standard list, capture, live restore, apply prices, Spoolman sync, auto-restore | ✓ | ✓ |
+| Full restore (slot count and colours, by editing `OrcaSlicer.conf`) | – | ✓ (opt-in) |
+| Touches files outside its own data folder or starts programs | never | only the opt-in full restore |
+
 ## Features
 
 | | |
@@ -26,8 +37,9 @@ FilamentStandard keeps one standard list: slot → filament preset per nozzle di
 | **Standard list editor** | A tab with one row per slot: colour, the preset for each nozzle diameter (the *default* column is used when a nozzle has no preset of its own), the Spoolman spool, and what the current project has in that slot. |
 | **Use current list as standard** | Captures the slots and colours of the open project. Spools are kept by matching preset and colour. |
 | **Restore presets now** | Re-assigns the preset of every existing slot live, through the plugin API. |
-| **Full restore on close** *(opt-in)* | Off until you enable it under *Full restore*. A small helper waits for OrcaSlicer to close, then does everything the API can't: it writes the list (presets, colours, flush matrix) into **every selected printer profile** and writes the prices into your filament presets. It backs up what it changes and can reopen OrcaSlicer. |
-| **Spoolman sync** *(optional)* | Previews new and removed spools, colour changes and the average price per kg of each preset, then applies them only when you confirm. Spools of an unknown filament ask for a preset once and remember it. |
+| **Apply prices to presets** | Writes each preset's price per kg (from Spoolman) through the plugin API, as an unsaved edit you save in OrcaSlicer. |
+| **Full restore on close** *(full edition, opt-in)* | Off until you enable it under *Full restore*. A small helper waits for OrcaSlicer to close, then does everything the API can't: it writes the list (presets, colours, flush matrix) into **every selected printer profile** and writes the prices into your filament presets. It backs up what it changes and can reopen OrcaSlicer. |
+| **Spoolman sync** *(optional)* | Asks before the first connection to a host. Previews new and removed spools, colour changes and the average price per kg of each preset, then applies them only when you confirm. Spools of an unknown filament ask for a preset once and remember it. |
 | **Restore on New project** *(optional, off by default)* | Re-assigns the presets whenever a new project starts. |
 | **Any printer** | Bambu Lab, Prusa, Creality, Voron/Klipper and others. Presets are chosen per nozzle diameter, and multi-extruder printers keep one flush matrix per extruder. |
 | **English / Português** | Follows OrcaSlicer's language, or can be set in Settings. |
@@ -39,8 +51,8 @@ The OrcaSlicer 2.5 plugin API can assign a preset to an **existing** slot (`orca
 
 ## Privacy and safety
 
-- **No network access unless you set it up.** The plugin only talks to the Spoolman URL you type in Settings, and only when you press *Sync with Spoolman*. That is a read-only `GET /api/v1/spool`; nothing is sent anywhere.
-- **`OrcaSlicer.conf` is only edited by the opt-in full restore, with OrcaSlicer closed.**
+- **No network access unless you set it up.** The plugin only talks to the Spoolman URL you type in Settings, after you confirm it, and only when you press *Sync with Spoolman*. That is a read-only `GET /api/v1/spool`; nothing is sent anywhere.
+- **`OrcaSlicer.conf` is only edited by the opt-in full restore of the full edition, with OrcaSlicer closed.** The cloud edition does not contain that code.
   - That file also holds other settings, such as the access codes of your printers.
   - The full restore changes only the `orca_presets` entries of the printers you selected.
   - Every other key is written back unchanged and is never copied, logged or sent anywhere.
@@ -50,7 +62,7 @@ The OrcaSlicer 2.5 plugin API can assign a preset to an **existing** slot (`orca
 
 ## Install
 
-1. Download [`filament_standard_any.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard_any.py), or subscribe to **FilamentStandard** on Orca Cloud once it's listed.
+1. Subscribe to **FilamentStandard** on Orca Cloud (cloud edition), or download the full edition [`filament_standard.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard.py).
 2. In OrcaSlicer open **Plugins** → *More plugin install options* → **Install local plugin** and pick the file.
 3. Accept the permission prompts:
    - **threads**: for the live restore;

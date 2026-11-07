@@ -75,9 +75,17 @@ class FakeBundle:
 
 class FakeTransaction:
     def __init__(self, host, slot, name):
-        self.host, self.slot, self.name = host, slot, name
+        self.host, self.slot, self.name = host, slot, name or host.slots[slot - 1]
+        self.staged = {}
+
+    def set(self, key, value):
+        if key in self.staged:
+            raise ValueError("already staged")
+        self.staged[key] = value
 
     def commit(self):
+        if self.staged:
+            self.host.edits.append((self.name, dict(self.staged)))
         if self.name not in self.host.filament_presets:
             raise RuntimeError("No filament preset named %r" % self.name)
         self.host.slots[self.slot - 1] = self.name
@@ -96,6 +104,7 @@ class FakeHost:
         self.colors = ["#FFFFFF", "#000000"]
         self.language = "en_US"
         self.commits = []
+        self.edits = []
         host = self
 
         class _Editor:

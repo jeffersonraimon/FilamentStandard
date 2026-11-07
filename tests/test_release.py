@@ -25,8 +25,10 @@ def test_build_current_version(build_release, tmp_path):
     version = current_version()
     notes = build_release.build("v" + version, str(tmp_path))
     assert sorted(os.listdir(tmp_path)) == ["filament_standard.py", "filament_standard_any.py", "notes.md"]
-    with open(os.path.join(ROOT, "filament_standard.py"), "rb") as a, open(tmp_path / "filament_standard_any.py", "rb") as b:
-        assert a.read() == b.read()
+    cloud = (tmp_path / "filament_standard_any.py").read_text(encoding="utf-8")
+    full = (tmp_path / "filament_standard.py").read_text(encoding="utf-8")
+    assert 'EDITION = "cloud"' in cloud and "OrcaSlicer.conf" not in cloud
+    assert 'EDITION = "full"' in full and "def restore(" in full and "full-edition" not in full
     assert "## Install" in notes and "filament_standard_any.py" in notes
     assert "## [" not in notes  # only this version's section
 

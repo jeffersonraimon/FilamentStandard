@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented here. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [3.0.0] - 2026-11-07
+Two editions are built from the same source.
+
+### Editions
+| Edition | File | Where | What it can do |
+|---|---|---|---|
+| **Cloud** | `filament_standard_any.py` | Orca Cloud | Uses only the plugin API and its own storage folder. It never reads `OrcaSlicer.conf` or user preset files and never starts programs. |
+| **Full** | `filament_standard.py` | GitHub | Everything above, plus the opt-in full restore. |
+
+`scripts/build_release.py` creates the cloud edition by removing the `>>> full-edition` blocks.
+
+### Added
+- **Apply prices to presets:** writes each preset's price per kg through the plugin API, as an unsaved edit you then save in OrcaSlicer. Available in both editions.
+- **Spoolman consent:** the plugin asks before the first connection to a Spoolman host and connects only to the host you confirmed. The network permission is requested for that host only.
+
+### Changed
+- The cloud edition has no first-run import from other installs, because that reads files outside the plugin's own folder.
+- The cloud edition's tab hides the full-restore controls.
+
 ## [2.2.0] - 2026-11-07
 ### Security and privacy
 - The full restore is **off by default**. It has to be enabled under *Full restore*, which explains what it changes, and it asks for confirmation each time.

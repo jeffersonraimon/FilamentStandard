@@ -171,6 +171,11 @@ def test_sync_preview_and_apply(plugin, monkeypatch):
     page.on_message({"cmd": "sync_apply"})
     assert page.state()["error"] == "Create the sync preview first"
     page.on_message({"cmd": "sync_preview"})
+    assert page.state()["error"].startswith("Allow the connection to Spoolman")  # asks first
+    assert page.state()["proposal"] is None
+    page.on_message({"cmd": "sync_preview", "consent": True})
+    assert page.state()["std"]["spoolman_consent"] == "http://spoolman.local:7912"
+    assert module.orca.permissions[-1] == {"network": ["http://spoolman.local:7912"]}
     proposal = page.state()["proposal"]
     assert [u["id"] for u in proposal["unmapped"]] == [2]
     page.on_message({"cmd": "sync_apply", "map": {"Delta|PETG Basic": {"default": "PETG C", "0.2": "PETG C 0.2"}}})
@@ -290,3 +295,42 @@ def test_find_previous_from_cloud_storage(fs, tmp_path):
     (cloud / fs.STD_FILE).write_text('{"slots": [{"presets": {"default": "Z"}}]}', encoding="utf-8")
     assert fs.find_previous(str(cloud))[1]["slots"][0]["presets"]["default"] == "Y"  # never itself
     assert fs.find_previous(str(tmp_path / "nothing" / "here")) == ("", None)
+
+
+def test_spoolman_consent_is_per_host(plugin, monkeypatch):
+    module, page, host = plugin
+    calls = []
+    monkeypatch.setattr(module, "fetch_spools", lambda url: calls.append(url) or [])
+    page.std = module.clean_standard({"spoolman_url": "http://a.local:7912", "spoolman_consent": "http://a.local:7912"})
+    page.on_message({"cmd": "sync_preview"})
+    assert calls == ["http://a.local:7912"] and not page.state()["error"]
+    page.std["spoolman_url"] = "http://b.local:7912"  # another host needs a new confirmation
+    page.on_message({"cmd": "sync_preview"})
+    assert calls == ["http://a.local:7912"] and page.state()["error"]
+
+
+def test_declared_network_only_for_confirmed_host(plugin):
+    module, page, host = plugin
+    with open(os.path.join(host.storage_dir, module.STD_FILE), "w", encoding="utf-8") as stream:
+        json.dump({"spoolman_url": "http://a.local:7912", "spoolman_consent": ""}, stream)
+    module.storage_from = lambda path: host.storage_dir
+    module.declare_permissions()
+    assert module.orca.permissions[-1]["network"] == []
+    with open(os.path.join(host.storage_dir, module.STD_FILE), "w", encoding="utf-8") as stream:
+        json.dump({"spoolman_url": "http://a.local:7912", "spoolman_consent": "http://a.local:7912"}, stream)
+    module.declare_permissions()
+    assert module.orca.permissions[-1]["network"] == ["http://a.local:7912"]
+
+
+def test_apply_prices_through_the_api(plugin):
+    module, page, host = plugin
+    host.slots = ["PLA A", "PLA B", "PLA A", "Generic PLA"]
+    page.std = module.clean_standard({"prices": {"PLA A": 120, "PLA B": 99.5}})
+    page.on_message({"cmd": "apply_prices"})
+    page.wait()
+    assert host.edits == [("PLA A", {"filament_cost": "120.00"}), ("PLA B", {"filament_cost": "99.50"})]
+    assert host.slots == ["PLA A", "PLA B", "PLA A", "Generic PLA"]  # assignments untouched
+    assert "2 preset(s)" in page.status
+    host.slots = ["Generic PLA"]
+    page.on_message({"cmd": "apply_prices"})
+    assert page.state()["status"] == "No preset in the current project has a different price."

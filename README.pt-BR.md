@@ -19,6 +19,17 @@ O OrcaSlicer guarda uma lista de filamentos por perfil de impressora, em `orca_p
 
 O FilamentStandard guarda uma lista padrão: slot → perfil de filamento por diâmetro de bico, cor e carretel do Spoolman. Ele devolve essa lista quando você quiser.
 
+## Edições
+
+As duas edições são geradas do mesmo código pelo `scripts/build_release.py`.
+
+| | **Edição Cloud** `filament_standard_any.py` | **Edição completa** `filament_standard.py` |
+|---|---|---|
+| Onde | Orca Cloud | [Releases do GitHub](https://github.com/jeffersonraimon/FilamentStandard/releases/latest) |
+| Lista padrão, captura, restauração ao vivo, aplicar preços, Spoolman, restauração automática | ✓ | ✓ |
+| Restauração completa (quantidade de slots e cores, editando o `OrcaSlicer.conf`) | – | ✓ (opcional) |
+| Mexe em arquivos fora da própria pasta de dados ou executa programas | nunca | só a restauração completa opcional |
+
 ## Recursos
 
 | | |
@@ -26,8 +37,9 @@ O FilamentStandard guarda uma lista padrão: slot → perfil de filamento por di
 | **Editor da lista padrão** | Uma aba com uma linha por slot: cor, perfil para cada diâmetro de bico (a coluna *padrão* vale quando o bico não tem perfil próprio), carretel do Spoolman e o que o projeto atual tem naquele slot. |
 | **Usar a lista atual como padrão** | Captura os slots e as cores do projeto aberto. Os carretéis são mantidos casando perfil e cor. |
 | **Restaurar perfis agora** | Troca na hora o perfil de cada slot existente, pela API de plugins. |
-| **Restauração completa ao fechar** *(opcional)* | Fica desligada até você ativar em *Restauração completa*. Um pequeno auxiliar espera o OrcaSlicer fechar e faz o que a API não consegue: grava a lista (perfis, cores e matriz de purga) em **todos os perfis de impressora escolhidos** e os preços nos perfis de filamento. Antes, faz backup do que vai mudar. Depois, pode reabrir o OrcaSlicer. |
-| **Sincronização com o Spoolman** *(opcional)* | Mostra antes os carretéis novos e removidos, as mudanças de cor e o preço médio por kg de cada perfil. Só aplica quando você confirma. Carretel de filamento desconhecido pede o perfil uma vez e lembra dele. |
+| **Aplicar preços aos perfis** | Grava o preço por kg de cada perfil (vindo do Spoolman) pela API de plugins, como edição não salva que você salva no OrcaSlicer. |
+| **Restauração completa ao fechar** *(edição completa, opcional)* | Fica desligada até você ativar em *Restauração completa*. Um pequeno auxiliar espera o OrcaSlicer fechar e faz o que a API não consegue: grava a lista (perfis, cores e matriz de purga) em **todos os perfis de impressora escolhidos** e os preços nos perfis de filamento. Antes, faz backup do que vai mudar. Depois, pode reabrir o OrcaSlicer. |
+| **Sincronização com o Spoolman** *(opcional)* | Pede confirmação antes da primeira conexão a um servidor. Mostra antes os carretéis novos e removidos, as mudanças de cor e o preço médio por kg de cada perfil. Só aplica quando você confirma. Carretel de filamento desconhecido pede o perfil uma vez e lembra dele. |
 | **Restaurar ao criar Novo projeto** *(opcional, desligado por padrão)* | Troca os perfis sempre que um projeto novo começa. |
 | **Qualquer impressora** | Bambu Lab, Prusa, Creality, Voron/Klipper e outras. O perfil é escolhido por diâmetro de bico, e impressoras com mais de um extrusor mantêm uma matriz de purga por extrusor. |
 | **English / Português** | Segue o idioma do OrcaSlicer, ou você escolhe em Configuração. |
@@ -39,8 +51,8 @@ A API do OrcaSlicer 2.5 consegue trocar o perfil de um slot **que já existe** (
 
 ## Privacidade e segurança
 
-- **Sem acesso à rede, a não ser que você configure.** O plugin só fala com a URL do Spoolman que você digitar em Configuração, e só quando você clica em *Sincronizar com o Spoolman*. É uma leitura (`GET /api/v1/spool`); nada é enviado para lugar nenhum.
-- **O `OrcaSlicer.conf` só é editado pela restauração completa, que é opcional e roda com o OrcaSlicer fechado.**
+- **Sem acesso à rede, a não ser que você configure.** O plugin só fala com a URL do Spoolman que você digitar em Configuração, depois de você confirmar, e só quando você clica em *Sincronizar com o Spoolman*. É uma leitura (`GET /api/v1/spool`); nada é enviado para lugar nenhum.
+- **O `OrcaSlicer.conf` só é editado pela restauração completa da edição completa, que é opcional e roda com o OrcaSlicer fechado.** A edição Cloud não tem esse código.
   - Esse arquivo também guarda outras configurações, como os códigos de acesso das suas impressoras.
   - A restauração completa muda só as entradas `orca_presets` das impressoras que você escolheu.
   - Todas as outras chaves são gravadas de volta sem alteração e nunca são copiadas, registradas em log nem enviadas.
@@ -50,7 +62,7 @@ A API do OrcaSlicer 2.5 consegue trocar o perfil de um slot **que já existe** (
 
 ## Instalação
 
-1. Baixe o [`filament_standard_any.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard_any.py), ou assine o **FilamentStandard** no Orca Cloud quando ele estiver publicado.
+1. Assine o **FilamentStandard** no Orca Cloud (edição Cloud), ou baixe a edição completa [`filament_standard.py`](https://github.com/jeffersonraimon/FilamentStandard/releases/latest/download/filament_standard.py).
 2. No OrcaSlicer, abra **Plugins** → *More plugin install options* → **Install local plugin** e escolha o arquivo.
 3. Aceite os pedidos de permissão:
    - **threads**: para a restauração ao vivo;

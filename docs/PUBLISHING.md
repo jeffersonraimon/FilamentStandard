@@ -13,7 +13,14 @@ The accepted suffixes are:
 | macOS | `macosx`, `macosx_x86_64`, `macosx_arm64`, `macosx_universal` |
 | Linux | `linux`, `linux_x86_64`, `linux_arm64` |
 
-The source file in the repository stays `filament_standard.py`. `scripts/build_release.py` creates both names in `dist/`.
+The source file in the repository stays `filament_standard.py`. `scripts/build_release.py` creates two editions in `dist/`:
+
+| File | Edition | Contents |
+|---|---|---|
+| `filament_standard_any.py` | Cloud, for Orca Cloud | Every block between `>>> full-edition` and `<<< full-edition` is removed. It uses only the plugin API and its own storage folder, which is what Orca Cloud's automated review requires. `tests/test_cloud_edition.py` checks it. |
+| `filament_standard.py` | Full, for GitHub releases | Keeps the opt-in full restore. |
+
+Code that reads `OrcaSlicer.conf` or user preset files, or starts processes, must stay inside those markers.
 
 ## Releasing a new version
 
