@@ -1,0 +1,25 @@
+{
+ "version": 2,
+ "slots": [
+  {"presets": {"default": "Generic PLA @BBL A1", "0.2": "Generic PLA @BBL A1 0.2 nozzle"}, "color": "#FFFFFF", "spool": 1},
+  {"presets": {"default": "Generic PLA @BBL A1", "0.2": "Generic PLA @BBL A1 0.2 nozzle"}, "color": "#000000", "spool": 2},
+  {"presets": {"default": "Generic PLA Silk @BBL A1"}, "color": "#C0C0C0", "spool": null},
+  {"presets": {"default": "Generic PETG @BBL A1", "0.2": "Generic PETG @BBL A1 0.2 nozzle"}, "color": "#FFFFFF", "spool": 3},
+  {"presets": {"default": "Generic PETG @BBL A1", "0.2": "Generic PETG @BBL A1 0.2 nozzle"}, "color": "#000000", "spool": 4}
+ ],
+ "printers": {
+  "Bambu Lab A1 0.2 nozzle": "0.2",
+  "Bambu Lab A1 0.4 nozzle": "0.4",
+  "Bambu Lab A1 0.6 nozzle": "0.6"
+ },
+ "spool_map": {
+  "Generic|PLA Basic": {"default": "Generic PLA @BBL A1", "0.2": "Generic PLA @BBL A1 0.2 nozzle"},
+  "Generic|PETG Basic": {"default": "Generic PETG @BBL A1", "0.2": "Generic PETG @BBL A1 0.2 nozzle"}
+ },
+ "prices": {},
+ "spoolman_url": "http://192.168.1.10:7912",
+ "auto_new_project": false,
+ "relaunch": true,
+ "language": "auto",
+ "sort_on_sync": true
+}

@@ -1,0 +1,27 @@
+[project]
+name = "filament-standard"
+version = "2.0.0"
+description = "OrcaSlicer plugin: keep a standard filament list per printer, restore it and sync it with Spoolman."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Jefferson J. Raimon" }]
+
+[project.urls]
+Homepage = "https://github.com/jeffersonraimon/FilamentStandard"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 130
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["conftest"]
