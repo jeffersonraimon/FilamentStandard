@@ -89,4 +89,7 @@ def build(tag, out_dir):
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         raise SystemExit(__doc__)
-    print(build(sys.argv[1], os.path.join(ROOT, "dist")))
+    notes = build(sys.argv[1], os.path.join(ROOT, "dist"))
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")  # Windows consoles default to cp1252 ("→" in the notes)
+    print(notes)

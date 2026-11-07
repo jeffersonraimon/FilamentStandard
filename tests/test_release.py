@@ -57,3 +57,13 @@ def test_changelog_section(build_release):
 def test_every_version_has_a_changelog_entry(build_release):
     with open(os.path.join(ROOT, "CHANGELOG.md"), encoding="utf-8") as stream:
         assert build_release.changelog_section(stream.read(), current_version()).strip()
+
+
+def test_cli_prints_non_ascii_notes_on_a_legacy_console(tmp_path):
+    """CI on Windows uses cp1252 for stdout; the notes contain characters such as "→"."""
+    import subprocess
+    import sys
+    env = dict(os.environ, PYTHONIOENCODING="cp1252", PYTHONUTF8="0")
+    proc = subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "build_release.py"), "v" + current_version()],
+                          capture_output=True, env=env, cwd=str(tmp_path))
+    assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
