@@ -29,7 +29,7 @@ def test_build_current_version(build_release, tmp_path):
     full = (tmp_path / "filament_standard.py").read_text(encoding="utf-8")
     assert 'EDITION = "cloud"' in cloud and "OrcaSlicer.conf" not in cloud
     assert 'EDITION = "full"' in full and "def restore(" in full and "full-edition" not in full
-    assert "## Install" in notes and "filament_standard_any.py" in notes
+    assert "## Install" in notes and "filament_standard.py" in notes and "Orca Cloud" in notes
     assert "## [" not in notes  # only this version's section
 
 
